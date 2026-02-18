@@ -2,10 +2,10 @@ import chalk from "chalk";
 import * as p from "@clack/prompts";
 import { existsSync } from "fs";
 import { join } from "path";
-import { loadConfig, DEFAULT_CONFIG } from "../lib/config.js";
+import { loadConfig } from "../lib/config.js";
 import type { Provider } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
-import { initCommand } from "./init.js";
+import { STARTER_INDEX, writeDefaultConfigFile } from "./init.js";
 import { analyzeCommand } from "./analyze.js";
 import { setupCommand } from "./setup.js";
 
@@ -169,10 +169,14 @@ export async function wizardCommand(options: { dir?: string }) {
 
   const s = p.spinner();
 
-  // Init
+  // Init — use shared helpers directly to avoid interleaved console output
   s.start("Initializing .context/ directory...");
   if (!contextExists) {
-    await initCommand({ dir: repoRoot, provider: selectedProvider });
+    const config = loadConfig(repoRoot);
+    const store = new ContextStore(repoRoot, config);
+    store.scaffold();
+    store.writeIndex(STARTER_INDEX);
+    writeDefaultConfigFile(repoRoot, selectedProvider, config.model);
   }
   s.stop("Initialized .context/ directory");
 

@@ -12,6 +12,10 @@ import { ContextStore } from "../lib/context-store.js";
 import { SearchIndex } from "../lib/search.js";
 import { createEmbeddingProvider } from "../lib/embeddings.js";
 import type { RepoContextConfig } from "../lib/config.js";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { version: PKG_VERSION } = require("../../package.json");
 
 const VALID_CATEGORIES = ["facts", "decisions", "regressions", "sessions", "changelog", "preferences"];
 
@@ -89,8 +93,8 @@ export function detectQueryCategory(query: string): string | undefined {
   // Regression/bug queries
   if (/\b(bug|broke|regression|crash|error\b|fail|fix\b|issues?\b|problem|broken)/.test(q)) return "regressions";
 
-  // Preference/style queries
-  if (/\b(prefer|style|convention|format|pattern|coding style|tab|indent|lint)/.test(q)) return "preferences";
+  // Preference/style queries — require coding/style context to avoid false positives
+  if (/\b(prefer(?:red|ence|s)?|coding style|naming convention|indent(?:ation)?|lint(?:ing)?|tab(?:s|\s+vs|\s+or)|code format(?:ting)?)/.test(q)) return "preferences";
 
   // Session queries
   if (/\b(last session|previous session|yesterday|worked on|accomplished)/.test(q)) return "sessions";
@@ -139,7 +143,7 @@ export async function startMcpServer(
   const server = new Server(
     {
       name: "repomemory",
-      version: "1.1.0",
+      version: PKG_VERSION,
     },
     {
       capabilities: {
@@ -875,6 +879,12 @@ export async function startMcpServer(
     }
 
     const [, category, filename] = match;
+
+    // Validate category to prevent path traversal
+    if (!VALID_CATEGORIES.includes(category)) {
+      throw new Error(`Invalid category in URI: ${category}`);
+    }
+
     const content = store.readEntry(category, filename);
 
     if (!content) {
@@ -892,7 +902,11 @@ export async function startMcpServer(
 
   // --- Graceful shutdown with auto-session capture ---
 
+  let cleanupDone = false;
   const cleanup = () => {
+    if (cleanupDone) return;
+    cleanupDone = true;
+
     // Auto-write session summary if there was meaningful activity
     const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
     const hasActivity = session.toolCalls.length > 2;

@@ -27,8 +27,15 @@ describe("detectQueryCategory", () => {
   it("routes style queries to preferences", () => {
     expect(detectQueryCategory("coding style for components")).toBe("preferences");
     expect(detectQueryCategory("preferred design pattern")).toBe("preferences");
-    expect(detectQueryCategory("formatting conventions")).toBe("preferences");
+    expect(detectQueryCategory("code formatting rules")).toBe("preferences");
     expect(detectQueryCategory("indentation rules")).toBe("preferences");
+    expect(detectQueryCategory("linting configuration")).toBe("preferences");
+  });
+
+  it("does not route generic words to preferences", () => {
+    // "pattern" and "format" are too broad — should NOT route to preferences
+    expect(detectQueryCategory("API error handling pattern")).not.toBe("preferences");
+    expect(detectQueryCategory("format of the response")).not.toBe("preferences");
   });
 
   it("routes session queries to sessions", () => {

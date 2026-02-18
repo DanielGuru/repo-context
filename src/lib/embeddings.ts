@@ -94,15 +94,27 @@ async function createOpenAIEmbeddingProvider(
   const client = new OpenAI({ apiKey });
   const embeddingModel = model || "text-embedding-3-small";
 
+  // Known dimensions per model — updated dynamically on first call for unknown models
+  const KNOWN_DIMS: Record<string, number> = {
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+    "text-embedding-ada-002": 1536,
+  };
+  let dims = KNOWN_DIMS[embeddingModel] || 1536;
+
   return {
     name: "openai",
-    dimensions: 1536,
+    get dimensions() { return dims; },
     embed: async (texts: string[]) => {
       const response = await client.embeddings.create({
         model: embeddingModel,
         input: texts,
       });
-      return response.data.map((d) => new Float32Array(d.embedding));
+      const arrays = response.data.map((d) => new Float32Array(d.embedding));
+      if (arrays.length > 0 && arrays[0].length !== dims) {
+        dims = arrays[0].length;
+      }
+      return arrays;
     },
   };
 }
@@ -116,14 +128,27 @@ async function createGeminiEmbeddingProvider(
   const embeddingModel = model || "text-embedding-004";
   const genModel = genAI.getGenerativeModel({ model: embeddingModel });
 
+  let dims = 768; // Default for text-embedding-004
+
   return {
     name: "gemini",
-    dimensions: 768,
+    get dimensions() { return dims; },
     embed: async (texts: string[]) => {
+      // Parallelize in chunks of 5 to avoid rate limits
+      const chunkSize = 5;
       const results: Float32Array[] = [];
-      for (const text of texts) {
-        const result = await genModel.embedContent(text);
-        results.push(new Float32Array(result.embedding.values));
+      for (let i = 0; i < texts.length; i += chunkSize) {
+        const chunk = texts.slice(i, i + chunkSize);
+        const chunkResults = await Promise.all(
+          chunk.map(async (text) => {
+            const result = await genModel.embedContent(text);
+            return new Float32Array(result.embedding.values);
+          })
+        );
+        results.push(...chunkResults);
+      }
+      if (results.length > 0 && results[0].length !== dims) {
+        dims = results[0].length;
       }
       return results;
     },

@@ -69,14 +69,28 @@ export class ContextStore {
   }
 
   private sanitizeFilename(filename: string): string {
+    const original = filename;
     if (!filename.endsWith(".md")) {
       filename = filename + ".md";
     }
-    return filename
+    let sanitized = filename
       .toLowerCase()
       .replace(/[^a-z0-9._-]/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
+
+    // If all meaningful characters were stripped (e.g. all-unicode input),
+    // generate a deterministic name from the original string
+    const nameWithoutExt = sanitized.replace(/\.md$/, "");
+    if (!nameWithoutExt) {
+      let hash = 0;
+      for (let i = 0; i < original.length; i++) {
+        hash = ((hash << 5) - hash + original.charCodeAt(i)) | 0;
+      }
+      sanitized = `entry-${Math.abs(hash).toString(36)}.md`;
+    }
+
+    return sanitized;
   }
 
   private validateCategory(category: string): void {
@@ -120,11 +134,12 @@ export class ContextStore {
       existing = readFileSync(filePath, "utf-8");
     }
 
-    writeFileSync(filePath, existing + "\n\n" + content);
+    writeFileSync(filePath, existing ? existing + "\n\n" + content : content);
     return relative(this.root, filePath);
   }
 
   deleteEntry(category: string, filename: string): boolean {
+    this.validateCategory(category);
     const sanitized = this.sanitizeFilename(filename);
     const filePath = join(this.contextDir, category, sanitized);
     if (!existsSync(filePath)) return false;
@@ -134,6 +149,7 @@ export class ContextStore {
   }
 
   readEntry(category: string, filename: string): string | null {
+    this.validateCategory(category);
     const filePath = join(this.contextDir, category, filename);
     if (!existsSync(filePath)) {
       // Try sanitized version

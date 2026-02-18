@@ -33,6 +33,7 @@ describe("ContextStore", () => {
       expect(existsSync(join(tempDir, ".context", "regressions"))).toBe(true);
       expect(existsSync(join(tempDir, ".context", "sessions"))).toBe(true);
       expect(existsSync(join(tempDir, ".context", "changelog"))).toBe(true);
+      expect(existsSync(join(tempDir, ".context", "preferences"))).toBe(true);
     });
 
     it("creates a .gitignore file", () => {
@@ -145,6 +146,7 @@ describe("ContextStore", () => {
         "regressions",
         "sessions",
         "changelog",
+        "preferences",
       ];
       for (const cat of validCategories) {
         expect(() =>
@@ -185,6 +187,17 @@ describe("ContextStore", () => {
       );
       expect(existsSync(filePath)).toBe(true);
     });
+
+    it("handles all-unicode filenames without collisions", () => {
+      store.writeEntry("facts", "\u8ba4\u8bc1\u6d41\u7a0b", "content1");
+      store.writeEntry("facts", "\u6570\u636e\u5e93", "content2");
+
+      const entries = store.listEntries("facts");
+      expect(entries.length).toBe(2);
+      // Both should have unique, non-empty filenames
+      expect(entries[0].filename).not.toBe(entries[1].filename);
+      expect(entries[0].filename.length).toBeGreaterThan(3);
+    });
   });
 
   describe("readEntry", () => {
@@ -210,6 +223,11 @@ describe("ContextStore", () => {
       const result = store.readEntry("facts", "My Entry");
       expect(result).toBe("content");
     });
+
+    it("validates category and rejects invalid categories", () => {
+      expect(() => store.readEntry("../etc", "passwd")).toThrow(/Invalid category/);
+      expect(() => store.readEntry("invalid", "test.md")).toThrow(/Invalid category/);
+    });
   });
 
   describe("deleteEntry", () => {
@@ -229,6 +247,10 @@ describe("ContextStore", () => {
     it("returns false for a non-existent file", () => {
       const result = store.deleteEntry("facts", "does-not-exist");
       expect(result).toBe(false);
+    });
+
+    it("validates category and rejects invalid categories", () => {
+      expect(() => store.deleteEntry("../etc", "passwd")).toThrow(/Invalid category/);
     });
   });
 
@@ -277,6 +299,19 @@ describe("ContextStore", () => {
       expect(() =>
         store.appendEntry("bad-cat", "test", "content")
       ).toThrow(/Invalid category/);
+    });
+
+    it("does not prepend blank lines on new files", () => {
+      store.appendEntry("sessions", "no-blanks", "First content.");
+      const filePath = join(
+        tempDir,
+        ".context",
+        "sessions",
+        "no-blanks.md"
+      );
+      const content = readFileSync(filePath, "utf-8");
+      expect(content).toBe("First content.");
+      expect(content.startsWith("\n")).toBe(false);
     });
   });
 

@@ -3,10 +3,15 @@ import { existsSync, mkdirSync, writeFileSync, chmodSync, readFileSync, unlinkSy
 import { join } from "path";
 import { execFileSync } from "child_process";
 
+const HOOK_MARKER_START = "# >>> repomemory start >>>";
+const HOOK_MARKER_END = "# <<< repomemory end <<<";
+
 const HOOK_CONTENT = `#!/bin/sh
+${HOOK_MARKER_START}
 # repomemory: auto-sync git history after commits
 # Installed by: repomemory hook install
 npx -y repomemory sync --dir "$(git rev-parse --show-toplevel)" 2>/dev/null &
+${HOOK_MARKER_END}
 `;
 
 export async function hookCommand(
@@ -87,13 +92,24 @@ function uninstallHook(repoRoot: string) {
     return;
   }
 
-  // Remove repomemory lines
-  const lines = existing.split("\n");
-  const filtered = lines.filter(
-    (line) => !line.includes("repomemory") || line.startsWith("#!")
-  );
+  // Prefer marker-based removal (new installs), fall back to line-matching (legacy)
+  let remaining: string;
+  const startIdx = existing.indexOf(HOOK_MARKER_START);
+  const endIdx = existing.indexOf(HOOK_MARKER_END);
 
-  const remaining = filtered.join("\n").trim();
+  if (startIdx !== -1 && endIdx !== -1) {
+    const before = existing.slice(0, startIdx).trimEnd();
+    const after = existing.slice(endIdx + HOOK_MARKER_END.length).trimStart();
+    remaining = (before + (after ? "\n" + after : "")).trim();
+  } else {
+    // Legacy: remove individual repomemory lines
+    const lines = existing.split("\n");
+    const filtered = lines.filter(
+      (line) => !line.includes("repomemory") || line.startsWith("#!")
+    );
+    remaining = filtered.join("\n").trim();
+  }
+
   if (remaining === "#!/bin/sh" || remaining === "") {
     // Hook is now empty — remove it
     unlinkSync(hookPath);

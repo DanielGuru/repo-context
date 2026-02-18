@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import { loadConfig } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
 import { SearchIndex } from "../lib/search.js";
@@ -28,10 +28,12 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || "/", `http://localhost:${port}`);
 
-    // CORS preflight
+    const allowedOrigin = `http://localhost:${port}`;
+
+    // CORS preflight — restrict to same origin
     if (req.method === "OPTIONS") {
       res.writeHead(204, {
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": allowedOrigin,
         "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
       });
@@ -50,7 +52,7 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
           body += chunk;
           if (body.length > MAX_BODY_SIZE) {
             bodyTooLarge = true;
-            res.writeHead(413, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            res.writeHead(413, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
             res.end(JSON.stringify({ error: "Request body too large (max 5MB)" }));
             req.destroy();
           }
@@ -60,7 +62,7 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
           try {
             const { category, filename, content } = JSON.parse(body);
             if (!category || !filename || content === undefined || content === null) {
-              res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+              res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
               res.end(JSON.stringify({ error: "Missing required fields: category, filename, and content" }));
               return;
             }
@@ -71,10 +73,10 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
               const entry = entries.find((e) => e.relativePath === writtenPath);
               if (entry) await searchIndex.indexEntry(entry);
             }
-            res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
             res.end(JSON.stringify({ success: true }));
           } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
             res.end(JSON.stringify({ error: (e as Error).message }));
           }
         });
@@ -83,7 +85,7 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
 
       const category = url.searchParams.get("category") || undefined;
       const entries = store.listEntries(category);
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
       res.end(JSON.stringify(entries.map((e) => ({
         category: e.category,
         filename: e.filename,
@@ -101,7 +103,7 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
       const category = url.searchParams.get("category") || undefined;
 
       if (!query || query.length < 2) {
-        res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+        res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
         res.end(JSON.stringify([]));
         return;
       }
@@ -114,10 +116,10 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
           }
 
           const results = await searchIndex.search(query, category, 20);
-          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
           res.end(JSON.stringify(results));
         } catch {
-          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
           res.end(JSON.stringify([]));
         }
       })();
@@ -126,14 +128,14 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
 
     if (url.pathname === "/api/stats") {
       const stats = store.getStats();
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
       res.end(JSON.stringify(stats));
       return;
     }
 
     if (url.pathname === "/api/index") {
       const content = store.readIndex();
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
       res.end(JSON.stringify({ content }));
       return;
     }
@@ -143,16 +145,20 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
     res.end(buildDashboardHTML(config.provider, config.model));
   });
 
-  server.listen(port, () => {
+  server.listen(port, "127.0.0.1", () => {
     const url = `http://localhost:${port}`;
     console.log(chalk.bold(`\n\ud83c\udf10 repomemory dashboard\n`));
     console.log(`  ${chalk.cyan("URL:")} ${chalk.underline(url)}`);
     console.log(`  ${chalk.cyan("Root:")} ${repoRoot}`);
     console.log(chalk.dim(`\n  Press Ctrl+C to stop.\n`));
 
-    // Try to open browser
-    const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-    exec(`${cmd} ${url}`, () => {}); // Silently fail if can't open
+    // Try to open browser (use execFile to avoid shell injection)
+    if (process.platform === "win32") {
+      execFile("cmd", ["/c", "start", url], () => {});
+    } else {
+      const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+      execFile(cmd, [url], () => {});
+    }
   });
 
   // Graceful shutdown
@@ -715,9 +721,9 @@ document.getElementById('searchInput').addEventListener('input', () => {
       try {
         const results = await fetch('/api/search?q=' + encodeURIComponent(q) + (currentCategory ? '&category=' + currentCategory : '')).then(r => r.json());
         if (results.length > 0) {
-          const matchedFilenames = new Set(results.map(r => r.filename));
+          const matchedKeys = new Set(results.map(r => r.category + '/' + r.filename));
           const filtered = allEntries.filter(e =>
-            matchedFilenames.has(e.filename) &&
+            matchedKeys.has(e.category + '/' + e.filename) &&
             (!currentCategory || e.category === currentCategory)
           );
           renderEntries(filtered.length > 0 ? filtered : getFilteredEntries());
@@ -745,10 +751,19 @@ function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function sanitizeHtml(html) {
+  // Strip script tags and event handlers to prevent XSS
+  html = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');
+  html = html.replace(/\\s+on\\w+\\s*=\\s*["'][^"']*["']/gi, '');
+  html = html.replace(/\\s+on\\w+\\s*=\\s*[^\\s>]+/gi, '');
+  html = html.replace(/href\\s*=\\s*["']javascript:[^"']*["']/gi, 'href="#"');
+  return html;
+}
+
 function renderMarkdown(md) {
   // Use marked.js if available (loaded from CDN), else fallback to regex
   if (typeof marked !== 'undefined') {
-    try { return marked.parse(md); } catch {}
+    try { return sanitizeHtml(marked.parse(md)); } catch {}
   }
   return regexRenderMarkdown(md);
 }

@@ -32,6 +32,9 @@ async function getSqlJs(): Promise<SqlJsStatic> {
     initSqlJsPromise = import("sql.js").then((mod) => {
       const initSqlJs = mod.default;
       return initSqlJs();
+    }).catch((err) => {
+      initSqlJsPromise = null; // Allow retry on failure
+      throw err;
     });
   }
   return initSqlJsPromise;
@@ -41,7 +44,6 @@ export class SearchIndex {
   private db: SqlJsDatabase | null = null;
   private dbPath: string;
   private store: ContextStore;
-  private initialized = false;
   private hasFts5 = false;
   private embeddingProvider: EmbeddingProvider | null;
   private alpha: number;
@@ -93,7 +95,6 @@ export class SearchIndex {
           }
         }
 
-        this.initialized = true;
         return this.db;
       } catch {
         // Corrupt DB, start fresh
@@ -102,7 +103,6 @@ export class SearchIndex {
 
     this.db = new SQL.Database();
     this.initSchema();
-    this.initialized = true;
     return this.db;
   }
 
@@ -175,11 +175,40 @@ export class SearchIndex {
 
     const entries = this.store.listEntries();
 
-    db.run("DELETE FROM documents");
+    // Build map of existing DB entries to enable incremental updates.
+    // This preserves embeddings for unchanged entries (avoids costly re-embedding).
+    const existingMap = new Map<string, string>();
+    try {
+      const result = db.exec("SELECT category, filename, updated_at FROM documents");
+      if (result.length > 0) {
+        for (const row of result[0].values) {
+          existingMap.set(`${row[0]}/${row[1]}`, row[2] as string);
+        }
+      }
+    } catch {
+      // Table may not exist yet on first run
+    }
+
+    const currentKeys = new Set<string>();
 
     for (const entry of entries) {
+      const key = `${entry.category}/${entry.filename}`;
+      currentKeys.add(key);
+
+      const existingTimestamp = existingMap.get(key);
+      const entryTimestamp = entry.lastModified.toISOString();
+
+      // Skip if unchanged — preserves existing embeddings
+      if (existingTimestamp === entryTimestamp) continue;
+
+      // Remove old entry (triggers FTS5 delete trigger if applicable)
       db.run(
-        `INSERT OR REPLACE INTO documents (category, filename, title, content, relative_path, updated_at)
+        "DELETE FROM documents WHERE category = ? AND filename = ?",
+        [entry.category, entry.filename]
+      );
+
+      db.run(
+        `INSERT INTO documents (category, filename, title, content, relative_path, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
           entry.category,
@@ -187,12 +216,22 @@ export class SearchIndex {
           entry.title,
           entry.content,
           entry.relativePath,
-          entry.lastModified.toISOString(),
+          entryTimestamp,
         ]
       );
     }
 
-    // Compute embeddings for entries that don't have them
+    // Remove entries that were deleted from disk
+    for (const key of existingMap.keys()) {
+      if (!currentKeys.has(key)) {
+        const slashIdx = key.indexOf("/");
+        const cat = key.slice(0, slashIdx);
+        const fname = key.slice(slashIdx + 1);
+        db.run("DELETE FROM documents WHERE category = ? AND filename = ?", [cat, fname]);
+      }
+    }
+
+    // Only embed entries that don't have embeddings yet (new/changed ones)
     if (this.embeddingProvider) {
       await this.embedMissingEntries(entries);
     }
@@ -350,7 +389,7 @@ export class SearchIndex {
     try {
       const results = db.exec(sql, params);
       if (!results.length || !results[0].values.length) {
-        // Fall back to OR semantics
+        // Fall back to OR semantics with a fresh query
         const orTerms = query
           .replace(/['"]/g, "")
           .split(/\s+/)
@@ -359,9 +398,22 @@ export class SearchIndex {
           .join(" OR ");
 
         if (orTerms !== terms) {
-          const orParams = [...params];
-          orParams[0] = orTerms;
-          const orResults = db.exec(sql, orParams);
+          let orSql = `
+            SELECT d.category, d.filename, d.title, d.content, d.relative_path,
+                   rank * -1 as score
+            FROM documents_fts
+            JOIN documents d ON d.id = documents_fts.rowid
+            WHERE documents_fts MATCH ?
+          `;
+          const orParams: unknown[] = [orTerms];
+          if (category) {
+            orSql += " AND d.category = ?";
+            orParams.push(category);
+          }
+          orSql += " ORDER BY rank LIMIT ?";
+          orParams.push(limit);
+
+          const orResults = db.exec(orSql, orParams);
           if (orResults.length && orResults[0].values.length) {
             return this.mapResults(orResults[0], query);
           }
@@ -447,11 +499,10 @@ export class SearchIndex {
       if (!embBlob || embBlob.byteLength !== dims * 4) continue;
       if (dims !== queryEmbedding.length) continue;
 
-      const docEmbedding = new Float32Array(
-        embBlob.buffer,
-        embBlob.byteOffset,
-        dims
-      );
+      // Copy the buffer to avoid sharing with sql.js internals
+      const buffer = new ArrayBuffer(dims * 4);
+      new Uint8Array(buffer).set(new Uint8Array(embBlob.buffer, embBlob.byteOffset, dims * 4));
+      const docEmbedding = new Float32Array(buffer);
       const similarity = cosineSimilarity(queryEmbedding, docEmbedding);
 
       scored.push({
@@ -578,6 +629,5 @@ export class SearchIndex {
       this.db.close();
       this.db = null;
     }
-    this.initialized = false;
   }
 }
