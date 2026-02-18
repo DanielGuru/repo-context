@@ -12,6 +12,7 @@ import { setupCommand } from "./setup.js";
 export async function goCommand(options: {
   dir?: string;
   provider?: string;
+  embeddingProvider?: string;
   skipAnalyze?: boolean;
 }) {
   const repoRoot = options.dir || process.cwd();
@@ -56,9 +57,15 @@ export async function goCommand(options: {
     console.log(chalk.cyan(`${currentStep}/${totalSteps}`) + " Initializing .context/ directory...");
     store.scaffold();
     store.writeIndex(STARTER_INDEX);
-    writeDefaultConfigFile(repoRoot, config.provider, config.model);
+    writeDefaultConfigFile(repoRoot, config.provider, config.model, options.embeddingProvider);
 
-    steps.push("Initialized .context/ directory");
+    // Show embedding status
+    const embeddingLabel = options.embeddingProvider
+      ? options.embeddingProvider
+      : (process.env.OPENAI_API_KEY ? "openai (auto-detected)"
+        : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) ? "gemini (auto-detected)"
+        : "none (keyword search only)");
+    steps.push(`Initialized .context/ directory (embeddings: ${embeddingLabel})`);
   } else {
     console.log(chalk.dim(`${currentStep}/${totalSteps} .context/ already exists. Skipping init.`));
   }

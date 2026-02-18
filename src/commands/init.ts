@@ -25,10 +25,15 @@ Search this directory for task-relevant context before starting work.
 Write new learnings using the \`context_write\` MCP tool during your session.
 `;
 
-export function writeDefaultConfigFile(repoRoot: string, provider: string, model: string): void {
+export function writeDefaultConfigFile(
+  repoRoot: string,
+  provider: string,
+  model: string,
+  embeddingProvider?: string
+): void {
   const configPath = join(repoRoot, ".repomemory.json");
   if (!existsSync(configPath)) {
-    const configToWrite = {
+    const configToWrite: Record<string, unknown> = {
       provider,
       model,
       contextDir: DEFAULT_CONFIG.contextDir,
@@ -38,6 +43,9 @@ export function writeDefaultConfigFile(repoRoot: string, provider: string, model
       ignorePatterns: [] as string[],
       keyFilePatterns: [] as string[],
     };
+    if (embeddingProvider) {
+      configToWrite.embeddingProvider = embeddingProvider;
+    }
     writeFileSync(configPath, JSON.stringify(configToWrite, null, 2) + "\n");
   }
 }
@@ -69,7 +77,7 @@ Do NOT skip this step even if the task seems simple.**
 - Write a session summary: \`context_write(category="sessions", ...)\`
 - Route discoveries to the right category (facts/, decisions/, preferences/)`;
 
-export async function initCommand(options: { dir?: string; provider?: string }) {
+export async function initCommand(options: { dir?: string; provider?: string; embeddingProvider?: string }) {
   const repoRoot = options.dir || process.cwd();
   const config = loadConfig(repoRoot);
 
@@ -92,7 +100,7 @@ export async function initCommand(options: { dir?: string; provider?: string }) 
   store.writeIndex(STARTER_INDEX);
 
   // Write config file
-  writeDefaultConfigFile(repoRoot, config.provider, config.model);
+  writeDefaultConfigFile(repoRoot, config.provider, config.model, options.embeddingProvider);
 
   console.log(chalk.green("\u2713 Initialized .context/ directory\n"));
 

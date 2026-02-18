@@ -130,7 +130,47 @@ export async function wizardCommand(options: { dir?: string }) {
     }
   }
 
-  // Step 4: Choose AI tools to integrate
+  // Step 4: Embedding provider for semantic search
+  const embeddingKeys: { provider: string; label: string }[] = [];
+  if (process.env.OPENAI_API_KEY) {
+    embeddingKeys.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
+  }
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    embeddingKeys.push({ provider: "gemini", label: "Gemini (text-embedding-004)" });
+  }
+
+  let selectedEmbedding: string | undefined;
+
+  if (embeddingKeys.length > 0) {
+    const embeddingOptions = [
+      { value: "auto", label: "Auto-detect", hint: `Will use ${embeddingKeys[0].label}` },
+      ...embeddingKeys.map((k) => ({ value: k.provider, label: k.label })),
+      { value: "none", label: "None", hint: "Keyword search only — no API costs" },
+    ];
+
+    const embedding = await p.select({
+      message: "Embedding provider for semantic search?",
+      options: embeddingOptions,
+    });
+
+    if (p.isCancel(embedding)) {
+      p.cancel("Setup cancelled.");
+      process.exit(0);
+    }
+
+    if (embedding !== "auto" && embedding !== "none") {
+      selectedEmbedding = embedding as string;
+    }
+    // auto = omit from config (auto-detect at runtime), none = we'll skip
+    if (embedding === "none") {
+      selectedEmbedding = "__none__"; // sentinel to skip writing
+    }
+  } else {
+    p.log.info("No embedding API keys found. Search will use keyword matching only.");
+    p.log.info(chalk.dim("  Set OPENAI_API_KEY or GEMINI_API_KEY to enable semantic search later."));
+  }
+
+  // Step 5: Choose AI tools to integrate
   const tools = await p.multiselect({
     message: "Which AI tools do you use?",
     options: [
@@ -152,7 +192,7 @@ export async function wizardCommand(options: { dir?: string }) {
 
   const selectedTools = tools as string[];
 
-  // Step 5: Run analysis?
+  // Step 6: Run analysis?
   const runAnalysis = await p.confirm({
     message: `Analyze your repo with ${PROVIDER_INFO[selectedProvider].label}? (2-5 min, uses AI)`,
     initialValue: true,
@@ -163,7 +203,7 @@ export async function wizardCommand(options: { dir?: string }) {
     process.exit(0);
   }
 
-  // Step 6: Execute everything
+  // Step 7: Execute everything
   console.log(); // spacing
 
   const s = p.spinner();
@@ -175,7 +215,8 @@ export async function wizardCommand(options: { dir?: string }) {
     const store = new ContextStore(repoRoot, config);
     store.scaffold();
     store.writeIndex(STARTER_INDEX);
-    writeDefaultConfigFile(repoRoot, selectedProvider, config.model);
+    const embeddingToWrite = selectedEmbedding === "__none__" ? undefined : selectedEmbedding;
+    writeDefaultConfigFile(repoRoot, selectedProvider, config.model, embeddingToWrite);
   }
   s.stop("Initialized .context/ directory");
 

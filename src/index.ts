@@ -42,6 +42,7 @@ program
     "-p, --provider <provider>",
     "AI provider (anthropic, openai, gemini, grok)"
   )
+  .option("-e, --embedding-provider <provider>", "Embedding provider for semantic search (openai, gemini)")
   .action(initCommand);
 
 program
@@ -121,6 +122,7 @@ program
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
   .option("-m, --model <model>", "Model to use (provider-specific)")
+  .option("-e, --embedding-provider <provider>", "Embedding provider for semantic search (openai, gemini)")
   .option("--skip-analyze", "Skip the analysis step", false)
   .action(goCommand);
 
