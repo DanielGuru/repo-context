@@ -155,6 +155,30 @@ describe("SearchIndex", () => {
     index.close();
   });
 
+  it("embedding cache is invalidated after indexEntry and removeEntry", async () => {
+    store.writeEntry("facts", "cache-test", "# Cache Test\n\nEntry for cache invalidation check.");
+
+    const index = new SearchIndex(contextDir, store);
+    await index.rebuild();
+
+    // First search — primes the cache path
+    let results = await index.search("cache invalidation");
+    // May or may not find without semantic provider, but no crash
+    expect(Array.isArray(results)).toBe(true);
+
+    // Add a new entry directly (bypasses rebuild)
+    const newEntry = store.listEntries().find(e => e.filename === "cache-test.md")!;
+    await index.indexEntry({ ...newEntry, title: "Cache Updated", content: "# Cache Updated\n\nModified entry." });
+
+    // Remove it
+    await index.removeEntry("facts", "cache-test.md");
+
+    results = await index.search("cache-test");
+    expect(results.length).toBe(0);
+
+    index.close();
+  });
+
   it("returns empty results for empty query", async () => {
     store.writeEntry("facts", "auth", "# Auth\n\nLogin uses OAuth2.");
 
