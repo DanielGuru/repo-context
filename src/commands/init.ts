@@ -9,20 +9,28 @@ export const CLAUDE_MD_BLOCK = `## Repository Memory (repomemory)
 
 This repo uses [repomemory](https://github.com/DanielGuru/repomemory) for persistent AI memory.
 
-**At the start of every task:**
-1. Use \`context_search\` to find relevant architecture, decisions, and known issues
-2. Read \`.context/index.md\` for quick project orientation
+**IMPORTANT: Before starting ANY task, you MUST call \`context_search\` with relevant
+keywords. This is NOT optional. The knowledge base contains architecture docs,
+past decisions, and known regressions that WILL save you from mistakes.
+Do NOT skip this step even if the task seems simple.**
+
+**ALWAYS at the start of every task:**
+1. Call \`context_search\` with keywords related to your task
+2. If this is a new session, call \`context_auto_orient\` for a full project overview
+3. NEVER propose changes without first checking for past decisions
 
 **During your session:**
-- Use \`context_write\` to record discoveries, decisions, and gotchas
-- Use \`context_delete\` to remove stale or incorrect knowledge
+- ALWAYS use \`context_write\` to record discoveries, decisions, and gotchas
+- ALWAYS use \`context_delete\` to remove stale or incorrect knowledge
+- Record coding preferences in \`context_write(category="preferences", ...)\`
 
 **Before modifying code:**
-- Search \`context_search("component name")\` for known regressions
-- Check \`context_search("why")\` for past decisions before proposing alternatives
+- You MUST search for known regressions related to the component
+- You MUST check for past decisions before proposing alternatives
 
-**At end of session:**
-- Write a brief session summary: \`context_write(category="sessions", ...)\``;
+**At end of session (REQUIRED):**
+- Write a session summary: \`context_write(category="sessions", ...)\`
+- Route discoveries to the right category (facts/, decisions/, preferences/)`;
 
 export async function initCommand(options: { dir?: string; provider?: string }) {
   const repoRoot = options.dir || process.cwd();
@@ -57,6 +65,7 @@ export async function initCommand(options: { dir?: string; provider?: string }) 
 - \`regressions/\` \u2014 Known gotchas, things that broke before
 - \`sessions/\` \u2014 Compressed session summaries
 - \`changelog/\` \u2014 Recent changes by month
+- \`preferences/\` \u2014 Coding style, preferred patterns, tool configs
 
 ## For AI Agents
 Search this directory for task-relevant context before starting work.

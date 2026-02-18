@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.1.0 (2026-02-18)
+
+### New Features
+- **One-command setup** — `npx repomemory go` replaces 4-step init/analyze/setup flow
+- **Hybrid search** — Optional vector/semantic search via OpenAI or Gemini embeddings alongside FTS5 keyword search
+- **Intelligent category routing** — Search queries auto-route to the right category (e.g., "why X" → decisions/)
+- **Auto-session capture** — MCP server tracks tool calls and auto-writes session summary on shutdown
+- **Progressive disclosure** — Search returns compact one-line results by default, `detail="full"` for longer snippets
+- **Auto-purge detection** — context_write warns about potentially superseded entries, optional `supersedes` parameter
+- **preferences/ category** — New category for coding style, preferred patterns, tool configs
+- **context_auto_orient tool** — One-call project orientation: index + preferences + sessions + recent changes
+- **Dashboard edit mode** — Edit context entries inline in the web dashboard
+- **Dashboard server-side search** — Search hits the FTS5 index instead of client-side filtering
+- **Dashboard export** — Export all context as JSON
+- **Dashboard real-time polling** — Auto-refreshes when context files change
+- **Markdown rendering** — Dashboard uses marked.js for proper markdown rendering (CDN, with regex fallback)
+- **session-start / session-end skills** — New Claude Code skills for session management
+- **Write-nudge** — MCP server suggests context_write to agents that only read without writing
+
+### Improvements
+- CLAUDE.md block rewritten with MUST/ALWAYS/NEVER directive language for stronger agent adoption
+- MCP server upgraded from 5 to 6 tools with tool annotations
+- end-session prompt now instructs agents to route conclusions to the right categories
+- Search DB persisted to disk and loaded on restart (avoids full rebuild)
+- Empty-state messaging improved across all tools
+- context_list supports compact mode (default) for token efficiency
+- context_search supports detail parameter (compact/full)
+
+### Bug Fixes
+- context_read now validates category parameter
+- Fallback text search uses correct category after auto-routing retry
+
 ## 1.0.0 (2026-02-18)
 
 ### New Features

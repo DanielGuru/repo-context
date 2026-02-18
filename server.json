@@ -1,13 +1,13 @@
 {
   "$schema": "https://registry.modelcontextprotocol.io/schema/server.json",
   "name": "io.github.DanielGuru/repomemory",
-  "description": "Persistent, structured memory for AI coding agents. Your codebase never forgets.",
-  "version": "1.0.0",
+  "description": "Persistent, structured memory for AI coding agents. Hybrid keyword + semantic search, auto-session capture, intelligent category routing. Your codebase never forgets.",
+  "version": "1.1.0",
   "packages": [
     {
       "registry": "npm",
       "name": "repomemory",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "runtime": "node",
       "args": ["dist/mcp/server.js"]
     }
@@ -18,11 +18,11 @@
   "tools": [
     {
       "name": "context_search",
-      "description": "Search the repository's persistent knowledge base"
+      "description": "Search the repository's persistent knowledge base with intelligent category routing"
     },
     {
       "name": "context_write",
-      "description": "Write knowledge to persistent memory"
+      "description": "Write knowledge to persistent memory with auto-purge detection"
     },
     {
       "name": "context_delete",
@@ -30,17 +30,21 @@
     },
     {
       "name": "context_list",
-      "description": "List all knowledge entries"
+      "description": "List all knowledge entries with compact mode"
     },
     {
       "name": "context_read",
       "description": "Read a specific context file"
+    },
+    {
+      "name": "context_auto_orient",
+      "description": "Get comprehensive project orientation in one call — index, sessions, recent changes"
     }
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "categories": ["memory", "coding-agents", "knowledge-base"],
-      "tags": ["ai-memory", "context-engineering", "mcp", "claude-code", "cursor", "copilot"]
+      "tags": ["ai-memory", "context-engineering", "mcp", "claude-code", "cursor", "copilot", "semantic-search", "embeddings"]
     }
   }
 }

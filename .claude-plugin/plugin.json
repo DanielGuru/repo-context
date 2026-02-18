@@ -1,7 +1,7 @@
 {
   "name": "repomemory",
-  "version": "1.0.0",
-  "description": "Persistent, structured memory for AI coding agents. Your codebase never forgets.",
+  "version": "1.1.0",
+  "description": "Persistent, structured memory for AI coding agents. Your codebase never forgets. Hybrid keyword + semantic search, auto-session capture, intelligent category routing.",
   "author": "DanielGuru",
   "homepage": "https://github.com/DanielGuru/repomemory",
   "license": "MIT"

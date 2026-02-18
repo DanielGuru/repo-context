@@ -4,6 +4,8 @@ import { z } from "zod";
 
 const ProviderSchema = z.enum(["anthropic", "openai", "gemini", "grok"]);
 
+const EmbeddingProviderSchema = z.enum(["openai", "gemini"]);
+
 const ConfigFileSchema = z.object({
   provider: ProviderSchema.optional(),
   model: z.string().optional(),
@@ -16,9 +18,14 @@ const ConfigFileSchema = z.object({
   categories: z.array(z.string()).optional(),
   autoIndex: z.boolean().optional(),
   contextDir: z.string().optional(),
+  embeddingProvider: EmbeddingProviderSchema.optional(),
+  embeddingModel: z.string().optional(),
+  embeddingApiKey: z.string().optional(),
+  hybridAlpha: z.number().min(0).max(1).optional(),
 });
 
 export type Provider = z.infer<typeof ProviderSchema>;
+export type EmbeddingProvider = z.infer<typeof EmbeddingProviderSchema>;
 
 export interface RepoContextConfig {
   provider: Provider;
@@ -32,6 +39,10 @@ export interface RepoContextConfig {
   categories: string[];
   autoIndex: boolean;
   contextDir: string;
+  embeddingProvider?: EmbeddingProvider;
+  embeddingModel?: string;
+  embeddingApiKey?: string;
+  hybridAlpha: number;
 }
 
 export const DEFAULT_CONFIG: RepoContextConfig = {
@@ -94,9 +105,10 @@ export const DEFAULT_CONFIG: RepoContextConfig = {
   maxFileSize: 100_000,
   maxFilesForAnalysis: 80,
   maxGitCommits: 100,
-  categories: ["facts", "decisions", "regressions", "sessions", "changelog"],
+  categories: ["facts", "decisions", "regressions", "sessions", "changelog", "preferences"],
   autoIndex: true,
   contextDir: ".context",
+  hybridAlpha: 0.5,
 };
 
 export function loadConfig(repoRoot: string): RepoContextConfig {
@@ -132,6 +144,7 @@ export function loadConfig(repoRoot: string): RepoContextConfig {
         ...(userConfig.keyFilePatterns || []),
       ],
       categories: userConfig.categories || DEFAULT_CONFIG.categories,
+      hybridAlpha: userConfig.hybridAlpha ?? DEFAULT_CONFIG.hybridAlpha,
     };
   } catch {
     return { ...DEFAULT_CONFIG };

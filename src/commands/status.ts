@@ -59,12 +59,14 @@ export async function statusCommand(options: { dir?: string }) {
   const decisionsCount = stats.categories["decisions"] || 0;
   const regressionsCount = stats.categories["regressions"] || 0;
   const sessionsCount = stats.categories["sessions"] || 0;
+  const preferencesCount = stats.categories["preferences"] || 0;
 
   const suggestions: string[] = [];
   if (factsCount === 0) suggestions.push("Run `repomemory analyze` to generate architecture facts");
   if (decisionsCount === 0) suggestions.push("Document key architectural decisions in decisions/");
   if (regressionsCount === 0) suggestions.push("Record known gotchas in regressions/ to prevent repeat bugs");
   if (sessionsCount === 0) suggestions.push("AI agents can use context_write to record session summaries");
+  if (preferencesCount === 0) suggestions.push("Record coding preferences in preferences/ — helps agents match your style");
 
   if (stats.stalestFile && stats.stalestFile.age > 90 * 24 * 60 * 60 * 1000) {
     suggestions.push("Some context files are >90 days old \u2014 run `repomemory analyze --merge` to refresh");

@@ -10,6 +10,7 @@ import { statusCommand } from "./commands/status.js";
 import { wizardCommand } from "./commands/wizard.js";
 import { dashboardCommand } from "./commands/dashboard.js";
 import { hookCommand } from "./commands/hook.js";
+import { goCommand } from "./commands/go.js";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -96,6 +97,14 @@ program
   .description("Manage git hooks (install, uninstall) — auto-sync changelog on commits")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .action(hookCommand);
+
+program
+  .command("go")
+  .description("One-command setup — init, analyze, and configure Claude Code in one flow")
+  .option("-d, --dir <path>", "Repository root directory", process.cwd())
+  .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
+  .option("--skip-analyze", "Skip the analysis step", false)
+  .action(goCommand);
 
 // Global error handlers
 process.on("uncaughtException", (err) => {

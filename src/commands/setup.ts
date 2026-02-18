@@ -82,7 +82,7 @@ function setupClaude(_repoRoot: string) {
   console.log(chalk.dim("In repos without .context/, the tools are inert (no noise, no errors)."));
   console.log(chalk.dim("Run `repomemory init && repomemory analyze` in each repo you want to use it."));
   console.log();
-  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete"));
+  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient"));
 }
 
 function setupCursor(repoRoot: string) {
@@ -110,6 +110,7 @@ Read \`.context/index.md\` for immediate project understanding.
 - Document important discoveries in \`.context/sessions/\`
 - If you find a bug pattern, note it in \`.context/regressions/\`
 - If you make an architectural decision, record it in \`.context/decisions/\`
+- Record coding style preferences in \`.context/preferences/\`
 
 ## Context Files
 \`\`\`
@@ -118,6 +119,7 @@ Read \`.context/index.md\` for immediate project understanding.
 \u251c\u2500\u2500 facts/            \u2014 Architecture, patterns, integrations
 \u251c\u2500\u2500 decisions/        \u2014 Why things are this way
 \u251c\u2500\u2500 regressions/      \u2014 Known gotchas and past bugs
+\u251c\u2500\u2500 preferences/      \u2014 Coding style and preferred patterns
 \u251c\u2500\u2500 sessions/         \u2014 Session summaries
 \u2514\u2500\u2500 changelog/        \u2014 Monthly change logs
 \`\`\`
@@ -150,6 +152,7 @@ This project uses repomemory for persistent AI memory.
 - \`.context/facts/\` \u2014 Architecture, patterns, integrations
 - \`.context/decisions/\` \u2014 Architectural decisions with rationale
 - \`.context/regressions/\` \u2014 Known issues and past bugs
+- \`.context/preferences/\` \u2014 Coding style, preferred patterns
 - \`.context/sessions/\` \u2014 AI session summaries
 - \`.context/changelog/\` \u2014 Monthly change logs
 `;
@@ -191,6 +194,7 @@ This project uses repomemory for persistent AI memory across sessions.
 - \`.context/facts/\` — Architecture, patterns, how things work
 - \`.context/decisions/\` — Why things are this way (prevents re-debating)
 - \`.context/regressions/\` — Known gotchas (prevents re-breaking)
+- \`.context/preferences/\` — Coding style, preferred patterns
 - \`.context/sessions/\` — What happened in previous AI sessions
 - \`.context/changelog/\` — Monthly git history
 `;
@@ -227,6 +231,7 @@ This project uses repomemory for persistent AI memory across sessions.
 - Record session discoveries in \`.context/sessions/\`
 - Record new bug patterns in \`.context/regressions/\`
 - Record new decisions in \`.context/decisions/\`
+- Record coding preferences in \`.context/preferences/\`
 `;
 
   if (existsSync(rulesPath)) {
@@ -294,6 +299,7 @@ This project uses repomemory for persistent AI memory across sessions.
 - Record discoveries in \`.context/sessions/\`
 - Record bug patterns in \`.context/regressions/\`
 - Record decisions in \`.context/decisions/\`
+- Record coding preferences in \`.context/preferences/\`
 `;
 
   writeFileSync(rulesPath, content);

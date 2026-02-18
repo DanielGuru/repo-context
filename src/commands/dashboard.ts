@@ -1,8 +1,9 @@
 import chalk from "chalk";
-import { createServer } from "http";
+import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { exec } from "child_process";
 import { loadConfig } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
+import { SearchIndex } from "../lib/search.js";
 
 export async function dashboardCommand(options: { dir?: string; port?: string }) {
   const repoRoot = options.dir || process.cwd();
@@ -15,11 +16,71 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
     process.exit(1);
   }
 
-  const server = createServer((req, res) => {
+  // Initialize search index for server-side search
+  let searchIndex: SearchIndex | null = null;
+  try {
+    searchIndex = new SearchIndex(store.path, store);
+    await searchIndex.rebuild();
+  } catch {
+    // Search will fall back to client-side filtering
+  }
+
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || "/", `http://localhost:${port}`);
+
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      });
+      res.end();
+      return;
+    }
 
     // API: return JSON data
     if (url.pathname === "/api/entries") {
+      if (req.method === "PUT") {
+        // Edit an entry
+        const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5MB
+        let body = "";
+        let bodyTooLarge = false;
+        req.on("data", (chunk: Buffer) => {
+          body += chunk;
+          if (body.length > MAX_BODY_SIZE) {
+            bodyTooLarge = true;
+            res.writeHead(413, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            res.end(JSON.stringify({ error: "Request body too large (max 5MB)" }));
+            req.destroy();
+          }
+        });
+        req.on("end", async () => {
+          if (bodyTooLarge) return;
+          try {
+            const { category, filename, content } = JSON.parse(body);
+            if (!category || !filename || content === undefined || content === null) {
+              res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+              res.end(JSON.stringify({ error: "Missing required fields: category, filename, and content" }));
+              return;
+            }
+            const writtenPath = store.writeEntry(category, filename, content);
+            // Update search index — match by relativePath since filename gets sanitized
+            if (searchIndex) {
+              const entries = store.listEntries(category);
+              const entry = entries.find((e) => e.relativePath === writtenPath);
+              if (entry) await searchIndex.indexEntry(entry);
+            }
+            res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            res.end(JSON.stringify({ success: true }));
+          } catch (e) {
+            res.writeHead(400, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            res.end(JSON.stringify({ error: (e as Error).message }));
+          }
+        });
+        return;
+      }
+
       const category = url.searchParams.get("category") || undefined;
       const entries = store.listEntries(category);
       res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
@@ -32,6 +93,34 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
         lastModified: e.lastModified.toISOString(),
         sizeBytes: e.sizeBytes,
       }))));
+      return;
+    }
+
+    if (url.pathname === "/api/search") {
+      const query = url.searchParams.get("q") || "";
+      const category = url.searchParams.get("category") || undefined;
+
+      if (!query || query.length < 2) {
+        res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+        res.end(JSON.stringify([]));
+        return;
+      }
+
+      (async () => {
+        try {
+          if (!searchIndex) {
+            searchIndex = new SearchIndex(store.path, store);
+            await searchIndex.rebuild();
+          }
+
+          const results = await searchIndex.search(query, category, 20);
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(results));
+        } catch {
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify([]));
+        }
+      })();
       return;
     }
 
@@ -78,6 +167,7 @@ function buildDashboardHTML(provider: string, model: string): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>repomemory dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
 <style>
   :root {
     --bg: #0a0a0f;
@@ -91,6 +181,7 @@ function buildDashboardHTML(provider: string, model: string): string {
     --warn: #f0b040;
     --danger: #f85149;
     --purple: #bc8cff;
+    --pink: #e88fcf;
     --radius: 12px;
   }
 
@@ -133,7 +224,23 @@ function buildDashboardHTML(provider: string, model: string): string {
   .header .meta {
     color: var(--text-dim);
     font-size: 13px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
   }
+
+  .header .export-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .header .export-btn:hover { border-color: var(--accent); color: var(--text); }
 
   .search-bar {
     margin: 24px 32px;
@@ -152,9 +259,7 @@ function buildDashboardHTML(provider: string, model: string): string {
     transition: border-color 0.2s;
   }
 
-  .search-bar input:focus {
-    border-color: var(--accent);
-  }
+  .search-bar input:focus { border-color: var(--accent); }
 
   .search-bar .icon {
     position: absolute;
@@ -219,10 +324,7 @@ function buildDashboardHTML(provider: string, model: string): string {
     border-left: 3px solid transparent;
   }
 
-  .sidebar .cat-btn:hover {
-    background: var(--surface);
-    color: var(--text);
-  }
+  .sidebar .cat-btn:hover { background: var(--surface); color: var(--text); }
 
   .sidebar .cat-btn.active {
     background: var(--surface);
@@ -240,14 +342,9 @@ function buildDashboardHTML(provider: string, model: string): string {
     border-radius: 99px;
   }
 
-  .content {
-    padding: 20px 32px;
-  }
+  .content { padding: 20px 32px; }
 
-  .entry-grid {
-    display: grid;
-    gap: 12px;
-  }
+  .entry-grid { display: grid; gap: 12px; }
 
   .entry-card {
     background: var(--surface);
@@ -258,10 +355,7 @@ function buildDashboardHTML(provider: string, model: string): string {
     transition: all 0.15s;
   }
 
-  .entry-card:hover {
-    border-color: var(--accent);
-    transform: translateY(-1px);
-  }
+  .entry-card:hover { border-color: var(--accent); transform: translateY(-1px); }
 
   .entry-card .card-header {
     display: flex;
@@ -270,10 +364,7 @@ function buildDashboardHTML(provider: string, model: string): string {
     margin-bottom: 8px;
   }
 
-  .entry-card .card-title {
-    font-weight: 600;
-    font-size: 15px;
-  }
+  .entry-card .card-title { font-weight: 600; font-size: 15px; }
 
   .entry-card .card-meta {
     color: var(--text-dim);
@@ -296,6 +387,7 @@ function buildDashboardHTML(provider: string, model: string): string {
   .cat-regressions { background: rgba(248, 81, 73, 0.15); color: var(--danger); }
   .cat-sessions { background: rgba(57, 211, 83, 0.15); color: var(--accent2); }
   .cat-changelog { background: rgba(240, 176, 64, 0.15); color: var(--warn); }
+  .cat-preferences { background: rgba(232, 143, 207, 0.15); color: var(--pink); }
 
   .entry-card .preview {
     color: var(--text-dim);
@@ -329,8 +421,26 @@ function buildDashboardHTML(provider: string, model: string): string {
     padding: 32px;
   }
 
-  .detail-panel .close-btn {
+  .detail-panel .detail-actions {
     float: right;
+    display: flex;
+    gap: 8px;
+  }
+
+  .detail-panel .action-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .detail-panel .action-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  .detail-panel .close-btn {
     background: none;
     border: none;
     color: var(--text-dim);
@@ -372,6 +482,25 @@ function buildDashboardHTML(provider: string, model: string): string {
   }
   .detail-panel .md-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
+  .edit-area {
+    display: none;
+    width: 100%;
+    min-height: 400px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    color: var(--text);
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    margin-top: 12px;
+  }
+
+  .edit-area:focus { border-color: var(--accent); }
+
   .empty {
     text-align: center;
     color: var(--text-dim);
@@ -392,7 +521,10 @@ function buildDashboardHTML(provider: string, model: string): string {
 
 <div class="header">
   <h1><span class="logo">\u25c9 repomemory</span> <span style="color:var(--text-dim);font-weight:400;font-size:14px">dashboard</span></h1>
-  <div class="meta">${provider} \u00b7 ${model}</div>
+  <div class="meta">
+    <span>${provider} \u00b7 ${model}</span>
+    <button class="export-btn" onclick="exportAll()">\u2913 Export</button>
+  </div>
 </div>
 
 <div class="search-bar">
@@ -409,16 +541,23 @@ function buildDashboardHTML(provider: string, model: string): string {
 
 <div class="detail-overlay" id="detailOverlay">
   <div class="detail-panel" id="detailPanel">
-    <button class="close-btn" onclick="closeDetail()">\u00d7</button>
+    <div class="detail-actions">
+      <button class="action-btn" id="editBtn" onclick="toggleEdit()">\u270e Edit</button>
+      <button class="action-btn" id="saveBtn" style="display:none;color:var(--accent2)" onclick="saveEdit()">\u2713 Save</button>
+      <button class="close-btn" onclick="closeDetail()">\u00d7</button>
+    </div>
     <h2 id="detailTitle"></h2>
     <div class="card-meta" id="detailMeta" style="margin-bottom:16px"></div>
     <div class="md-content" id="detailContent"></div>
+    <textarea class="edit-area" id="editArea"></textarea>
   </div>
 </div>
 
 <script>
 let allEntries = [];
 let currentCategory = null;
+let editingEntry = null;
+let searchDebounce = null;
 
 async function init() {
   const [entries, stats] = await Promise.all([
@@ -492,14 +631,69 @@ function showDetail(index) {
   const e = filtered[index];
   if (!e) return;
 
+  editingEntry = e;
   document.getElementById('detailTitle').textContent = e.category + '/' + e.filename;
   document.getElementById('detailMeta').innerHTML = \`<span>\${e.title}</span> &middot; <span>\${(e.sizeBytes/1024).toFixed(1)}KB</span> &middot; <span>\${timeAgo(Date.now() - new Date(e.lastModified).getTime())}</span>\`;
   document.getElementById('detailContent').innerHTML = renderMarkdown(e.content);
   document.getElementById('detailOverlay').classList.add('visible');
+
+  // Reset edit state
+  document.getElementById('editArea').style.display = 'none';
+  document.getElementById('detailContent').style.display = 'block';
+  document.getElementById('saveBtn').style.display = 'none';
+  document.getElementById('editBtn').textContent = '\u270e Edit';
 }
 
 function closeDetail() {
   document.getElementById('detailOverlay').classList.remove('visible');
+  editingEntry = null;
+}
+
+function toggleEdit() {
+  const editArea = document.getElementById('editArea');
+  const content = document.getElementById('detailContent');
+  const saveBtn = document.getElementById('saveBtn');
+  const editBtn = document.getElementById('editBtn');
+
+  if (editArea.style.display === 'none') {
+    editArea.value = editingEntry.content;
+    editArea.style.display = 'block';
+    content.style.display = 'none';
+    saveBtn.style.display = 'inline-block';
+    editBtn.textContent = '\u2715 Cancel';
+    editArea.focus();
+  } else {
+    editArea.style.display = 'none';
+    content.style.display = 'block';
+    saveBtn.style.display = 'none';
+    editBtn.textContent = '\u270e Edit';
+  }
+}
+
+async function saveEdit() {
+  const content = document.getElementById('editArea').value;
+  const fname = editingEntry.filename.replace(/\\.md$/, '');
+
+  try {
+    const resp = await fetch('/api/entries', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: editingEntry.category,
+        filename: fname,
+        content,
+      }),
+    });
+
+    if (!resp.ok) throw new Error('Save failed');
+
+    editingEntry.content = content;
+    document.getElementById('detailContent').innerHTML = renderMarkdown(content);
+    toggleEdit();
+    init(); // Refresh all entries
+  } catch (e) {
+    alert('Failed to save: ' + e.message);
+  }
 }
 
 function getFilteredEntries() {
@@ -511,8 +705,32 @@ function getFilteredEntries() {
   });
 }
 
+// Server-side search with debounce
 document.getElementById('searchInput').addEventListener('input', () => {
-  filterCategory(currentCategory, document.querySelector('.cat-btn.active'));
+  clearTimeout(searchDebounce);
+  const q = document.getElementById('searchInput').value;
+
+  searchDebounce = setTimeout(async () => {
+    if (q.length >= 2) {
+      try {
+        const results = await fetch('/api/search?q=' + encodeURIComponent(q) + (currentCategory ? '&category=' + currentCategory : '')).then(r => r.json());
+        if (results.length > 0) {
+          const matchedFilenames = new Set(results.map(r => r.filename));
+          const filtered = allEntries.filter(e =>
+            matchedFilenames.has(e.filename) &&
+            (!currentCategory || e.category === currentCategory)
+          );
+          renderEntries(filtered.length > 0 ? filtered : getFilteredEntries());
+        } else {
+          renderEntries(getFilteredEntries());
+        }
+      } catch {
+        filterCategory(currentCategory, document.querySelector('.cat-btn.active'));
+      }
+    } else {
+      filterCategory(currentCategory, document.querySelector('.cat-btn.active'));
+    }
+  }, 300);
 });
 
 document.getElementById('detailOverlay').addEventListener('click', (e) => {
@@ -528,6 +746,14 @@ function escapeHtml(s) {
 }
 
 function renderMarkdown(md) {
+  // Use marked.js if available (loaded from CDN), else fallback to regex
+  if (typeof marked !== 'undefined') {
+    try { return marked.parse(md); } catch {}
+  }
+  return regexRenderMarkdown(md);
+}
+
+function regexRenderMarkdown(md) {
   var html = escapeHtml(md);
   var BT = String.fromCharCode(96);
   var codeBlockRe = new RegExp(BT+BT+BT+'(\\\\w*)?\\\\n([\\\\s\\\\S]*?)'+BT+BT+BT, 'g');
@@ -535,20 +761,29 @@ function renderMarkdown(md) {
     return '<pre><code>' + code.trim() + '</code></pre>';
   });
   var inlineCodeRe = new RegExp(BT+'([^'+BT+']+)'+BT, 'g');
-  html = html.replace(inlineCodeRe, '<code>\$1</code>');
-  html = html.replace(/^### (.+)\$/gm, '<h3>\$1</h3>');
-  html = html.replace(/^## (.+)\$/gm, '<h2>\$1</h2>');
-  html = html.replace(/^# (.+)\$/gm, '<h1>\$1</h1>');
-  html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>\$1</strong>');
-  html = html.replace(/\\*([^*]+)\\*/g, '<em>\$1</em>');
-  html = html.replace(/^&gt; (.+)\$/gm, '<blockquote>\$1</blockquote>');
-  html = html.replace(/^---\$/gm, '<hr>');
-  html = html.replace(/^- (.+)\$/gm, '<li>\$1</li>');
+  html = html.replace(inlineCodeRe, '<code>$1</code>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+  html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+  html = html.replace(/^---$/gm, '<hr>');
+  html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
   html = html.replace(/((<li>.*<\\/li>)\\n?)+/g, function(m) { return '<ul>' + m + '</ul>'; });
-  html = html.replace(/^\\d+\\. (.+)\$/gm, '<li>\$1</li>');
+  html = html.replace(/^\\d+\\. (.+)$/gm, '<li>$1</li>');
   html = html.replace(/\\n\\n(?!<)/g, '</p><p>');
   html = html.replace(/\\n(?!<)/g, '<br>');
   return '<p>' + html + '</p>';
+}
+
+function exportAll() {
+  const blob = new Blob([JSON.stringify(allEntries, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'repomemory-export.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function timeAgo(ms) {
@@ -561,6 +796,19 @@ function timeAgo(ms) {
   if (d < 365) return Math.floor(d/30) + 'mo ago';
   return Math.floor(d/365) + 'y ago';
 }
+
+// Real-time polling for changes
+setInterval(async () => {
+  try {
+    const entries = await fetch('/api/entries').then(r => r.json());
+    if (JSON.stringify(entries.map(e => e.lastModified)) !== JSON.stringify(allEntries.map(e => e.lastModified))) {
+      allEntries = entries;
+      const stats = await fetch('/api/stats').then(r => r.json());
+      renderSidebar(stats.categories);
+      filterCategory(currentCategory, document.querySelector('.cat-btn.active'));
+    }
+  } catch {}
+}, 5000);
 
 init();
 </script>

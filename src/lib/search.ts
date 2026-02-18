@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { ContextStore, ContextEntry } from "./context-store.js";
+import type { EmbeddingProvider } from "./embeddings.js";
+import { cosineSimilarity } from "./embeddings.js";
 
 export interface SearchResult {
   category: string;
@@ -41,23 +43,66 @@ export class SearchIndex {
   private store: ContextStore;
   private initialized = false;
   private hasFts5 = false;
+  private embeddingProvider: EmbeddingProvider | null;
+  private alpha: number;
 
-  constructor(contextDir: string, store: ContextStore) {
+  constructor(
+    contextDir: string,
+    store: ContextStore,
+    embeddingProvider?: EmbeddingProvider | null,
+    alpha?: number
+  ) {
     this.dbPath = join(contextDir, ".search.db");
     this.store = store;
+    this.embeddingProvider = embeddingProvider ?? null;
+    this.alpha = alpha ?? 0.5;
   }
 
   private async ensureDb(): Promise<SqlJsDatabase> {
     if (this.db) return this.db;
 
     const SQL = await getSqlJs();
-    this.db = new SQL.Database();
 
-    if (!this.initialized) {
-      this.initSchema();
-      this.initialized = true;
+    // Try to load existing DB from disk
+    if (existsSync(this.dbPath)) {
+      try {
+        const data = readFileSync(this.dbPath);
+        this.db = new SQL.Database(data);
+
+        // Detect FTS5 availability
+        try {
+          this.db.exec("SELECT * FROM documents_fts LIMIT 0");
+          this.hasFts5 = true;
+        } catch {
+          this.hasFts5 = false;
+        }
+
+        // Ensure embedding columns exist (migration for v1.0 → v1.1)
+        try {
+          this.db.exec("SELECT embedding FROM documents LIMIT 0");
+        } catch {
+          // Columns don't exist yet, add them
+          try {
+            this.db.run("ALTER TABLE documents ADD COLUMN embedding BLOB");
+            this.db.run("ALTER TABLE documents ADD COLUMN embedding_dims INTEGER DEFAULT 0");
+          } catch {
+            // If ALTER fails, we'll rebuild from scratch
+            this.db.close();
+            this.db = new SQL.Database();
+            this.initSchema();
+          }
+        }
+
+        this.initialized = true;
+        return this.db;
+      } catch {
+        // Corrupt DB, start fresh
+      }
     }
 
+    this.db = new SQL.Database();
+    this.initSchema();
+    this.initialized = true;
     return this.db;
   }
 
@@ -74,6 +119,8 @@ export class SearchIndex {
         content TEXT NOT NULL,
         relative_path TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        embedding BLOB,
+        embedding_dims INTEGER DEFAULT 0,
         UNIQUE(category, filename)
       )
     `);
@@ -126,9 +173,10 @@ export class SearchIndex {
   async rebuild(): Promise<void> {
     const db = await this.ensureDb();
 
+    const entries = this.store.listEntries();
+
     db.run("DELETE FROM documents");
 
-    const entries = this.store.listEntries();
     for (const entry of entries) {
       db.run(
         `INSERT OR REPLACE INTO documents (category, filename, title, content, relative_path, updated_at)
@@ -144,7 +192,55 @@ export class SearchIndex {
       );
     }
 
+    // Compute embeddings for entries that don't have them
+    if (this.embeddingProvider) {
+      await this.embedMissingEntries(entries);
+    }
+
     this.save();
+  }
+
+  private async embedMissingEntries(entries: ContextEntry[]): Promise<void> {
+    if (!this.embeddingProvider || !this.db) return;
+
+    // Find entries without embeddings
+    const result = this.db.exec(
+      "SELECT category, filename FROM documents WHERE embedding IS NULL OR embedding_dims = 0"
+    );
+
+    if (!result.length || !result[0].values.length) return;
+
+    const missing = result[0].values.map((row) => ({
+      category: row[0] as string,
+      filename: row[1] as string,
+    }));
+
+    // Batch embed (up to 20 at a time to avoid API limits)
+    const batchSize = 20;
+    for (let i = 0; i < missing.length; i += batchSize) {
+      const batch = missing.slice(i, i + batchSize);
+      const texts = batch.map((m) => {
+        const entry = entries.find(
+          (e) => e.category === m.category && e.filename === m.filename
+        );
+        if (!entry) return "";
+        return `${entry.title}\n\n${entry.content}`.slice(0, 8000);
+      });
+
+      try {
+        const embeddings = await this.embeddingProvider.embed(texts);
+        for (let j = 0; j < batch.length; j++) {
+          const blob = new Uint8Array(embeddings[j].buffer);
+          this.db!.run(
+            "UPDATE documents SET embedding = ?, embedding_dims = ? WHERE category = ? AND filename = ?",
+            [blob, this.embeddingProvider.dimensions, batch[j].category, batch[j].filename]
+          );
+        }
+      } catch {
+        // Skip this batch's embedding failures — keyword search still works
+        continue;
+      }
+    }
   }
 
   async indexEntry(entry: ContextEntry): Promise<void> {
@@ -155,9 +251,24 @@ export class SearchIndex {
       [entry.category, entry.filename]
     );
 
+    // Compute embedding if provider available
+    let embeddingBlob: Uint8Array | null = null;
+    let dims = 0;
+
+    if (this.embeddingProvider) {
+      try {
+        const textToEmbed = `${entry.title}\n\n${entry.content}`.slice(0, 8000);
+        const [embedding] = await this.embeddingProvider.embed([textToEmbed]);
+        embeddingBlob = new Uint8Array(embedding.buffer);
+        dims = this.embeddingProvider.dimensions;
+      } catch {
+        // Silently fall back to keyword-only for this entry
+      }
+    }
+
     db.run(
-      `INSERT INTO documents (category, filename, title, content, relative_path, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO documents (category, filename, title, content, relative_path, updated_at, embedding, embedding_dims)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.category,
         entry.filename,
@@ -165,6 +276,8 @@ export class SearchIndex {
         entry.content,
         entry.relativePath,
         entry.lastModified.toISOString(),
+        embeddingBlob,
+        dims,
       ]
     );
 
@@ -181,10 +294,26 @@ export class SearchIndex {
   }
 
   async search(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
-    if (this.hasFts5) {
-      return this.searchFts5(query, category, limit);
+    // Get keyword results
+    const keywordResults = this.hasFts5
+      ? await this.searchFts5(query, category, limit * 2)
+      : await this.searchLike(query, category, limit * 2);
+
+    // If no embedding provider, return keyword results only
+    if (!this.embeddingProvider) {
+      return keywordResults.slice(0, limit);
     }
-    return this.searchLike(query, category, limit);
+
+    // Attempt hybrid search
+    try {
+      const semanticResults = await this.searchSemantic(query, category, limit * 2);
+      if (semanticResults.length === 0) {
+        return keywordResults.slice(0, limit);
+      }
+      return this.hybridMerge(keywordResults, semanticResults, query, limit);
+    } catch {
+      return keywordResults.slice(0, limit);
+    }
   }
 
   /** Fast FTS5 search — used when the sql.js build supports it */
@@ -230,8 +359,9 @@ export class SearchIndex {
           .join(" OR ");
 
         if (orTerms !== terms) {
-          params[0] = orTerms;
-          const orResults = db.exec(sql, params);
+          const orParams = [...params];
+          orParams[0] = orTerms;
+          const orResults = db.exec(sql, orParams);
           if (orResults.length && orResults[0].values.length) {
             return this.mapResults(orResults[0], query);
           }
@@ -286,6 +416,112 @@ export class SearchIndex {
     }
   }
 
+  /** Semantic search using embeddings + cosine similarity */
+  private async searchSemantic(
+    query: string,
+    category?: string,
+    limit: number = 10
+  ): Promise<SearchResult[]> {
+    if (!this.embeddingProvider) return [];
+
+    const db = await this.ensureDb();
+    const [queryEmbedding] = await this.embeddingProvider.embed([query]);
+
+    // Get all documents with embeddings
+    let sql =
+      "SELECT id, category, filename, title, content, relative_path, embedding, embedding_dims FROM documents WHERE embedding IS NOT NULL AND embedding_dims > 0";
+    const params: unknown[] = [];
+    if (category) {
+      sql += " AND category = ?";
+      params.push(category);
+    }
+
+    const results = db.exec(sql, params);
+    if (!results.length || !results[0].values.length) return [];
+
+    // Compute cosine similarity for each
+    const scored: SearchResult[] = [];
+    for (const row of results[0].values) {
+      const embBlob = row[6] as Uint8Array;
+      const dims = row[7] as number;
+      if (!embBlob || embBlob.byteLength !== dims * 4) continue;
+      if (dims !== queryEmbedding.length) continue;
+
+      const docEmbedding = new Float32Array(
+        embBlob.buffer,
+        embBlob.byteOffset,
+        dims
+      );
+      const similarity = cosineSimilarity(queryEmbedding, docEmbedding);
+
+      scored.push({
+        category: row[1] as string,
+        filename: row[2] as string,
+        title: row[3] as string,
+        snippet: this.extractSnippet(row[4] as string, query),
+        score: similarity,
+        relativePath: row[5] as string,
+      });
+    }
+
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
+  /** Merge keyword and semantic results with weighted scoring */
+  hybridMerge(
+    keywordResults: SearchResult[],
+    semanticResults: SearchResult[],
+    query: string,
+    limit: number
+  ): SearchResult[] {
+    // Normalize scores to [0, 1] using min-max normalization (handles negative FTS5 scores)
+    const minKeyword = Math.min(...keywordResults.map((r) => r.score), 0);
+    const maxKeyword = Math.max(...keywordResults.map((r) => r.score), 0);
+    const keywordRange = maxKeyword - minKeyword || 0.001;
+
+    const minSemantic = Math.min(...semanticResults.map((r) => r.score), 0);
+    const maxSemantic = Math.max(...semanticResults.map((r) => r.score), 0);
+    const semanticRange = maxSemantic - minSemantic || 0.001;
+
+    const scoreMap = new Map<
+      string,
+      { keyword: number; semantic: number; result: SearchResult }
+    >();
+
+    for (const r of keywordResults) {
+      const key = `${r.category}/${r.filename}`;
+      scoreMap.set(key, {
+        keyword: (r.score - minKeyword) / keywordRange,
+        semantic: 0,
+        result: r,
+      });
+    }
+
+    for (const r of semanticResults) {
+      const key = `${r.category}/${r.filename}`;
+      const existing = scoreMap.get(key);
+      if (existing) {
+        existing.semantic = (r.score - minSemantic) / semanticRange;
+      } else {
+        scoreMap.set(key, {
+          keyword: 0,
+          semantic: (r.score - minSemantic) / semanticRange,
+          result: r,
+        });
+      }
+    }
+
+    return Array.from(scoreMap.values())
+      .map(({ keyword, semantic, result }) => ({
+        ...result,
+        score: this.alpha * keyword + (1 - this.alpha) * semantic,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+  }
+
   private mapResults(
     result: { columns: string[]; values: unknown[][] },
     query: string
@@ -331,8 +567,8 @@ export class SearchIndex {
     try {
       const data = this.db.export();
       writeFileSync(this.dbPath, Buffer.from(data));
-    } catch {
-      // Silently fail — search degradation is acceptable
+    } catch (e) {
+      console.error("Warning: Could not save search index:", e);
     }
   }
 

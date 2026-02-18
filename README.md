@@ -5,14 +5,14 @@
 **Your codebase never forgets.**
 
 AI agents lose context every session. repomemory fixes that.
-One command analyzes your repo and creates a persistent knowledge base that any AI tool can search, read, and write to.
+One command analyzes your repo and creates a persistent knowledge base that any AI tool can search, read, and write to — with hybrid keyword + semantic search, auto-session capture, and intelligent category routing.
 
 [![npm version](https://img.shields.io/npm/v/repomemory.svg)](https://www.npmjs.com/package/repomemory)
 [![license](https://img.shields.io/npm/l/repomemory.svg)](https://github.com/DanielGuru/repomemory/blob/main/LICENSE)
 [![CI](https://github.com/DanielGuru/repomemory/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielGuru/repomemory/actions)
 
 ```bash
-npx repomemory wizard
+npx repomemory go
 ```
 
 </div>
@@ -36,26 +36,41 @@ repomemory creates a structured, searchable knowledge base that AI agents can **
 
 ```
 .context/
-├── index.md              ← Quick orientation (loaded every session)
+├── index.md              <- Quick orientation (loaded every session)
 ├── facts/
-│   ├── architecture.md   ← Services, how they connect, deploy targets
-│   ├── database.md       ← Schema overview, key tables, relationships
-│   └── deployment.md     ← How to deploy, env vars, CI/CD
+│   ├── architecture.md   <- Services, how they connect, deploy targets
+│   ├── database.md       <- Schema overview, key tables, relationships
+│   └── deployment.md     <- How to deploy, env vars, CI/CD
 ├── decisions/
-│   ├── why-drizzle.md    ← "We chose Drizzle because X, not Prisma because Y"
-│   └── auth-strategy.md  ← "JWT over sessions because Z"
+│   ├── why-drizzle.md    <- "We chose Drizzle because X, not Prisma because Y"
+│   └── auth-strategy.md  <- "JWT over sessions because Z"
 ├── regressions/
-│   ├── sql-join-bug.md   ← "This broke before. Here's what happened."
-│   └── token-refresh.md  ← "53-day cycle, don't touch without reading this"
-├── sessions/             ← AI session summaries (auto-populated)
-└── changelog/            ← Monthly git history syncs
+│   ├── sql-join-bug.md   <- "This broke before. Here's what happened."
+│   └── token-refresh.md  <- "53-day cycle, don't touch without reading this"
+├── preferences/          <- How YOU code (new in v1.1)
+│   ├── coding-style.md   <- "Prefer functional components, TypeScript strict"
+│   └── patterns.md       <- "Always use barrel exports, no default exports"
+├── sessions/             <- AI session summaries (auto-captured on shutdown)
+└── changelog/            <- Monthly git history syncs
 ```
 
-**Facts** tell agents how things work. **Decisions** prevent re-debating. **Regressions** prevent re-breaking.
+**Facts** tell agents how things work. **Decisions** prevent re-debating. **Regressions** prevent re-breaking. **Preferences** teach agents how you code.
 
 ## Quick Start
 
-### Interactive Setup (Recommended)
+### One-Command Setup (v1.1)
+
+```bash
+npx repomemory go
+```
+
+This single command:
+1. Creates `.context/` if it doesn't exist
+2. Configures Claude Code MCP server if installed
+3. Runs AI analysis if context is empty
+4. Prints CLAUDE.md instructions to copy-paste
+
+### Interactive Setup
 
 ```bash
 npx repomemory wizard
@@ -92,7 +107,7 @@ git add .context/ && git commit -m "Add repomemory knowledge base"
 
 ### MCP Server — AI Agents With Memory
 
-The real power is the MCP server. It gives AI agents tools to search, read, write, and delete context:
+The real power is the MCP server. It gives AI agents 6 tools to search, orient, read, write, and delete context:
 
 ```bash
 npx repomemory serve
@@ -100,33 +115,61 @@ npx repomemory serve
 
 | Tool | What It Does |
 |------|-------------|
-| `context_search` | Full-text search across all knowledge |
-| `context_write` | Write new facts, decisions, regressions, session notes |
-| `context_read` | Read a specific context file |
-| `context_list` | Browse all entries by category |
+| `context_search` | Hybrid keyword + semantic search with intelligent category routing |
+| `context_auto_orient` | One-call project orientation: index, preferences, recent sessions, recent changes |
+| `context_write` | Write entries with auto-purge detection and supersedes support |
+| `context_read` | Read a specific context file (full content) |
+| `context_list` | Browse all entries by category (compact or detailed) |
 | `context_delete` | Remove stale or incorrect knowledge |
 
 When configured via `repomemory setup claude`, the MCP server auto-starts with Claude Code:
 
 ```
+Agent: "Let me orient myself in this project..."
+-> context_auto_orient()
+-> Returns: project overview, developer preferences, recent sessions, recent changes
+
 Agent: "Let me search for context about the authentication flow..."
-→ context_search("authentication flow")
-→ Returns: facts/auth.md, decisions/jwt-over-sessions.md
+-> context_search("authentication flow")
+-> Auto-routes to facts/ category, returns compact one-line results
 
 Agent: "I discovered a race condition in token refresh. Let me record this."
-→ context_write(category="regressions", filename="token-refresh-race", content="...")
-→ Persisted. Next session will find it.
+-> context_write(category="regressions", filename="token-refresh-race", content="...")
+-> Persisted. Detects if it supersedes an existing entry.
 ```
+
+### What's New in v1.1
+
+**Hybrid Search** — Keyword search (FTS5) + optional vector/semantic search via OpenAI or Gemini embeddings. Falls back to keyword-only when no embedding API key is available. Configure with `embeddingProvider` in `.repomemory.json`.
+
+**Intelligent Category Routing** — Search queries are auto-routed to the most relevant category. "Why did we use X" routes to `decisions/`. "Bug in login" routes to `regressions/`. "Coding style" routes to `preferences/`. If no results found, retries across all categories.
+
+**Auto-Session Capture** — The MCP server tracks all tool calls during a session and auto-writes a summary to `sessions/` when the server shuts down. Works with ALL MCP clients (Claude Code, Cursor, Copilot, Windsurf) — no hooks required.
+
+**Progressive Disclosure** — Search returns compact one-line summaries by default (~50 tokens per result). Use `detail="full"` for longer snippets. Reduces context window usage by ~10x.
+
+**Auto-Purge Detection** — When writing a new entry, the server checks for existing entries on the same topic and warns about potential supersedes. Use the `supersedes` parameter to auto-delete the old entry.
+
+**Preferences Category** — New `preferences/` category for coding style, preferred patterns, tool configs, and formatting rules. Personal developer knowledge that persists across sessions.
+
+**One-Command Setup** — `npx repomemory go` replaces the 4-step init + analyze + setup + copy flow.
+
+**Dashboard Improvements** — Edit entries inline, server-side FTS5 search, real-time polling, JSON export, proper markdown rendering.
 
 ### Web Dashboard
 
-Browse and search your context files in a beautiful local web UI:
+Browse, search, and edit your context files in a beautiful local web UI:
 
 ```bash
 npx repomemory dashboard
 ```
 
-Opens `http://localhost:3333` with category filtering, full-text search, and file previews.
+Opens `http://localhost:3333` with:
+- Category filtering and server-side full-text search
+- Inline editing with save
+- Real-time polling for changes
+- JSON export
+- Proper markdown rendering
 
 ### Smart Analysis
 
@@ -171,10 +214,12 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 
 | Provider | Models | Env Variable |
 |----------|--------|-------------|
-| `anthropic` | claude-sonnet-4-5, claude-opus-4-6 | `ANTHROPIC_API_KEY` |
+| `anthropic` | claude-sonnet-4-6, claude-opus-4-6 | `ANTHROPIC_API_KEY` |
 | `openai` | gpt-4o, o3-mini | `OPENAI_API_KEY` |
 | `gemini` | gemini-2.0-flash, gemini-2.5-pro | `GEMINI_API_KEY` / `GOOGLE_API_KEY` |
 | `grok` | grok-3, grok-3-mini | `GROK_API_KEY` / `XAI_API_KEY` |
+
+**Embeddings** (optional, for semantic search): OpenAI `text-embedding-3-small` or Gemini `text-embedding-004`. Auto-detected from available API keys.
 
 ## Supported AI Tools
 
@@ -192,6 +237,7 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 
 | Command | Description |
 |---------|-------------|
+| `repomemory go` | One-command setup — init + analyze + configure (new in v1.1) |
 | `repomemory wizard` | Interactive guided setup (recommended for first use) |
 | `repomemory init` | Scaffold `.context/` directory |
 | `repomemory analyze` | AI-powered repo analysis |
@@ -202,6 +248,7 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 | `repomemory setup <tool>` | Configure AI tool integration |
 | `repomemory status` | Show context coverage and freshness |
 | `repomemory dashboard` | Open web dashboard |
+| `repomemory hook install` | Auto-sync changelog on git commits |
 
 ## Configuration
 
@@ -210,16 +257,24 @@ Create `.repomemory.json` in your repo root:
 ```json
 {
   "provider": "anthropic",
-  "model": "claude-sonnet-4-5-20250929",
+  "model": "claude-sonnet-4-6",
   "contextDir": ".context",
   "maxFilesForAnalysis": 80,
   "maxGitCommits": 100,
   "ignorePatterns": [],
-  "keyFilePatterns": []
+  "keyFilePatterns": [],
+  "embeddingProvider": "openai",
+  "hybridAlpha": 0.5
 }
 ```
 
 Custom `ignorePatterns` and `keyFilePatterns` are **additive** — they extend the built-in defaults, not replace them.
+
+**Embedding config** (optional):
+- `embeddingProvider`: `"openai"` or `"gemini"` — which API to use for embeddings
+- `embeddingModel`: Override the default embedding model
+- `embeddingApiKey`: Explicit API key for embeddings (falls back to env vars)
+- `hybridAlpha`: Weight between keyword (1.0) and semantic (0.0) search. Default: 0.5
 
 ## How It Works
 
@@ -231,13 +286,15 @@ Custom `ignorePatterns` and `keyFilePatterns` are **additive** — they extend t
 4. **Respects** .gitignore — won't scan ignored files
 5. **Sends** everything to your AI model with a structured analysis prompt
 6. **Writes** organized knowledge to `.context/`
-7. **Indexes** all files for FTS5 full-text search
+7. **Indexes** all files for FTS5 full-text search + optional embeddings
 
 ### During Sessions (MCP Server)
 
-- Agent searches for relevant context at task start
-- Agent writes discoveries, decisions, and gotchas during work
-- Agent can delete stale or incorrect knowledge
+- Agent orients itself with `context_auto_orient` at session start
+- Agent searches for relevant context with intelligent category routing
+- Agent writes discoveries, decisions, and preferences during work
+- Auto-purge detection warns about superseded entries
+- Session activity is auto-captured on server shutdown
 - Knowledge accumulates session over session
 - Next session starts with everything previous sessions learned
 
@@ -246,12 +303,14 @@ Custom `ignorePatterns` and `keyFilePatterns` are **additive** — they extend t
 | | CLAUDE.md | repomemory |
 |--|-----------|-------------|
 | **Maintenance** | Manual | AI-generated + agent-maintained |
-| **Search** | Load everything | FTS5 search, return only relevant |
+| **Search** | Load everything | Hybrid keyword + semantic search |
 | **Cross-tool** | Claude Code only | 7 AI tools supported |
 | **Team knowledge** | One person writes | Every AI session contributes |
 | **Decisions** | Mixed in with instructions | Structured, searchable |
 | **Regressions** | Not tracked | Prevents repeat bugs |
-| **Freshness** | Unknown | Staleness detection + warnings |
+| **Preferences** | Not tracked | Persists coding style preferences |
+| **Freshness** | Unknown | Staleness detection + auto-purge |
+| **Sessions** | Not tracked | Auto-captured on shutdown |
 
 repomemory doesn't replace CLAUDE.md — it complements it. Your CLAUDE.md stays for instructions and rules. `.context/` holds the knowledge that grows over time.
 

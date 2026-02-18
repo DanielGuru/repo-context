@@ -45,6 +45,7 @@ export class ContextStore {
       join(this.contextDir, "regressions"),
       join(this.contextDir, "sessions"),
       join(this.contextDir, "changelog"),
+      join(this.contextDir, "preferences"),
     ];
 
     for (const dir of dirs) {
@@ -79,7 +80,7 @@ export class ContextStore {
   }
 
   private validateCategory(category: string): void {
-    const allowed = ["facts", "decisions", "regressions", "sessions", "changelog"];
+    const allowed = ["facts", "decisions", "regressions", "sessions", "changelog", "preferences"];
     if (!allowed.includes(category)) {
       throw new Error(`Invalid category: ${category}. Allowed: ${allowed.join(", ")}`);
     }

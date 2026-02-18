@@ -30,6 +30,7 @@ describe("loadConfig", () => {
       "regressions",
       "sessions",
       "changelog",
+      "preferences",
     ]);
   });
 

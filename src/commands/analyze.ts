@@ -14,6 +14,7 @@ interface AnalysisResult {
   facts: { filename: string; content: string }[];
   decisions: { filename: string; content: string }[];
   regressions: { filename: string; content: string }[];
+  preferences?: { filename: string; content: string }[];
 }
 
 const ANALYSIS_SYSTEM_PROMPT = `You are repomemory, an expert at analyzing codebases and creating structured knowledge bases for AI coding agents.
@@ -30,6 +31,9 @@ You must output valid JSON with this exact structure:
     {"filename": "descriptive-name.md", "content": "markdown content"}
   ],
   "regressions": [
+    {"filename": "descriptive-name.md", "content": "markdown content"}
+  ],
+  "preferences": [
     {"filename": "descriptive-name.md", "content": "markdown content"}
   ]
 }
@@ -62,6 +66,12 @@ REGRESSIONS (one file per known issue pattern):
 - Format: What happened, Root cause, How it was fixed, How to prevent it
 - Look for: TODO/FIXME/HACK comments, recent bugfix commits, workaround patterns
 - Only include if you have reasonable confidence
+
+PREFERENCES (inferred coding style, optional — omit if not confidently inferrable):
+- Look for: linter configs (.eslintrc, .prettierrc), tsconfig strict settings, naming conventions in code
+- Format: What the preference is, evidence from codebase
+- Examples: "Prefers functional components", "Uses barrel exports", "TypeScript strict mode"
+- Only include if clearly evidenced by config files or consistent patterns
 
 Rules:
 - Be specific — include file paths, function names, exact commands
@@ -298,6 +308,16 @@ export async function analyzeCommand(options: {
     console.log(`  ${chalk.green("\u2713")} ${path}`);
   }
 
+  for (const preference of analysis.preferences || []) {
+    const key = `preferences/${preference.filename.toLowerCase().replace(/[^a-z0-9._-]/g, "-")}.md`;
+    if (options.merge && existingFilenames.has(key)) {
+      console.log(`  ${chalk.yellow("\u2192")} ${key} (preserved existing)`);
+      continue;
+    }
+    const path = store.writeEntry("preferences", preference.filename, preference.content);
+    console.log(`  ${chalk.green("\u2713")} ${path}`);
+  }
+
   // Build search index
   const spinnerIndex = ora({ text: "Building search index...", color: "cyan" }).start();
   const searchIndex = new SearchIndex(store.path, store);
@@ -310,6 +330,7 @@ export async function analyzeCommand(options: {
   const factsCount = (analysis.facts || []).length;
   const decisionsCount = (analysis.decisions || []).length;
   const regressionsCount = (analysis.regressions || []).length;
+  const preferencesCount = (analysis.preferences || []).length;
 
   console.log(chalk.bold("\n\u2728 Analysis complete!\n"));
 
@@ -317,6 +338,7 @@ export async function analyzeCommand(options: {
   printCoverageBar("Facts", factsCount, 8);
   printCoverageBar("Decisions", decisionsCount, 5);
   printCoverageBar("Regressions", regressionsCount, 3);
+  printCoverageBar("Preferences", preferencesCount, 2);
 
   console.log(
     chalk.dim(`\n  Total: ${stats.totalFiles} files | ${(stats.totalSize / 1024).toFixed(1)}KB\n`)

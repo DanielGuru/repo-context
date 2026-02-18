@@ -208,6 +208,8 @@ export async function wizardCommand(options: { dir?: string }) {
       `Run ${chalk.cyan("repomemory status")} to see your context coverage.`,
       `Run ${chalk.cyan("repomemory analyze --merge")} to update without overwriting edits.`,
       `Run ${chalk.cyan("repomemory dashboard")} to browse context in your browser.`,
+      "",
+      chalk.dim(`Tip: Next time, use ${chalk.cyan("npx repomemory go")} for quick one-command setup.`),
     ].join("\n"),
     "Next steps"
   );
