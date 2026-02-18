@@ -672,6 +672,7 @@ export async function startMcpServer(
           content: string;
           append?: boolean;
           supersedes?: string;
+          scope?: "repo" | "global";
         };
 
         session.writeCallMade = true;
