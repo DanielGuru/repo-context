@@ -40,9 +40,9 @@ function setupClaude(repoRoot: string) {
 
   // Add MCP server config
   const mcpServers = (settings.mcpServers || {}) as Record<string, unknown>;
-  mcpServers["repo-context"] = {
+  mcpServers["repomemory"] = {
     command: "npx",
-    args: ["-y", "repo-context", "serve"],
+    args: ["-y", "repomemory", "serve"],
   };
   settings.mcpServers = mcpServers;
 
@@ -50,19 +50,19 @@ function setupClaude(repoRoot: string) {
 
   // Also update CLAUDE.md to point to .context/
   const claudeMdPath = join(repoRoot, "CLAUDE.md");
-  const contextNote = `\n## Repository Context\nThis repo uses [repo-context](https://github.com/repo-context/repo-context) for persistent AI memory.\nRead \`.context/index.md\` for instant orientation. The MCP server provides \`context_search\` and \`context_write\` tools.\n`;
+  const contextNote = `\n## Repository Context\nThis repo uses [repomemory](https://github.com/repomemory/repomemory) for persistent AI memory.\nRead \`.context/index.md\` for instant orientation. The MCP server provides \`context_search\` and \`context_write\` tools.\n`;
 
   if (existsSync(claudeMdPath)) {
     const existing = readFileSync(claudeMdPath, "utf-8");
-    if (!existing.includes("repo-context")) {
+    if (!existing.includes("repomemory")) {
       writeFileSync(claudeMdPath, existing + contextNote);
-      console.log(`  ${chalk.green("✓")} Updated CLAUDE.md with repo-context reference`);
+      console.log(`  ${chalk.green("✓")} Updated CLAUDE.md with repomemory reference`);
     }
   }
 
   console.log(chalk.green("\n✓ Claude Code configured!\n"));
   console.log(chalk.bold("Added to .claude/settings.json:"));
-  console.log(chalk.dim(JSON.stringify({ "repo-context": mcpServers["repo-context"] }, null, 2)));
+  console.log(chalk.dim(JSON.stringify({ "repomemory": mcpServers["repomemory"] }, null, 2)));
   console.log();
   console.log(
     chalk.dim("The MCP server will auto-start when Claude Code opens this project.")
@@ -70,7 +70,7 @@ function setupClaude(repoRoot: string) {
 }
 
 function setupCursor(repoRoot: string) {
-  // Create .cursor/rules/repo-context.mdc
+  // Create .cursor/rules/repomemory.mdc
   const cursorDir = join(repoRoot, ".cursor", "rules");
   mkdirSync(cursorDir, { recursive: true });
 
@@ -81,7 +81,7 @@ globs: **/*
 
 # Repository Context
 
-This project uses repo-context for persistent AI memory.
+This project uses repomemory for persistent AI memory.
 
 ## Quick Orientation
 Read \`.context/index.md\` for immediate project understanding.
@@ -108,12 +108,12 @@ Read \`.context/index.md\` for immediate project understanding.
 \`\`\`
 `;
 
-  writeFileSync(join(cursorDir, "repo-context.mdc"), ruleContent);
+  writeFileSync(join(cursorDir, "repomemory.mdc"), ruleContent);
 
   console.log(chalk.green("\n✓ Cursor configured!\n"));
-  console.log(`  ${chalk.green("✓")} Created .cursor/rules/repo-context.mdc`);
+  console.log(`  ${chalk.green("✓")} Created .cursor/rules/repomemory.mdc`);
   console.log();
-  console.log(chalk.dim("Cursor will auto-load the repo-context rule for all files."));
+  console.log(chalk.dim("Cursor will auto-load the repomemory rule for all files."));
 }
 
 function setupCopilot(repoRoot: string) {
@@ -124,7 +124,7 @@ function setupCopilot(repoRoot: string) {
   const instructionsPath = join(githubDir, "copilot-instructions.md");
   const content = `# Repository Context
 
-This project uses repo-context for persistent AI memory.
+This project uses repomemory for persistent AI memory.
 
 ## Before Starting Work
 1. Read \`.context/index.md\` for project orientation
@@ -143,8 +143,8 @@ This project uses repo-context for persistent AI memory.
   let existing = "";
   if (existsSync(instructionsPath)) {
     existing = readFileSync(instructionsPath, "utf-8");
-    if (existing.includes("repo-context")) {
-      console.log(chalk.yellow("⚠  copilot-instructions.md already references repo-context"));
+    if (existing.includes("repomemory")) {
+      console.log(chalk.yellow("⚠  copilot-instructions.md already references repomemory"));
       return;
     }
   }

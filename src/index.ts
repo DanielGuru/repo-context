@@ -10,7 +10,7 @@ import { setupCommand } from "./commands/setup.js";
 const program = new Command();
 
 program
-  .name("repo-context")
+  .name("repomemory")
   .description(
     "Persistent, structured memory for AI coding agents. Your repo remembers what every session learned."
   )
@@ -77,14 +77,14 @@ program
 
     if (!store.exists()) {
       console.log(chalk.red("✗ No .context/ directory found."));
-      console.log(chalk.dim("  Run `repo-context init` to get started."));
+      console.log(chalk.dim("  Run `repomemory init` to get started."));
       process.exit(1);
     }
 
     const stats = store.getStats();
     const entries = store.listEntries();
 
-    console.log(chalk.bold("\n📊 repo-context status\n"));
+    console.log(chalk.bold("\n📊 repomemory status\n"));
     console.log(`  ${chalk.cyan("Total files:")} ${stats.totalFiles}`);
     console.log(
       `  ${chalk.cyan("Total size:")} ${(stats.totalSize / 1024).toFixed(1)}KB`

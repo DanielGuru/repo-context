@@ -59,7 +59,7 @@ function resolveApiKeyForProvider(config: RepoContextConfig): string {
   }
 
   throw new Error(
-    `No API key found for ${config.provider}. Set ${envVar} environment variable or add apiKey to .repo-context.json`
+    `No API key found for ${config.provider}. Set ${envVar} environment variable or add apiKey to .repomemory.json`
   );
 }
 

@@ -1,10 +1,10 @@
-# repo-context — Instructions for AI Coding Agents
+# repomemory — Instructions for AI Coding Agents
 
 > This file is for Codex, Copilot Workspace, Devin, OpenClaw, and any other AI agent working on this codebase.
 
 ## Project Overview
 
-**repo-context** is a CLI tool + MCP server that gives AI coding agents persistent memory for repositories. It creates a `.context/` directory with structured knowledge (facts, decisions, regressions, session logs) that agents can search and write to.
+**repomemory** is a CLI tool + MCP server that gives AI coding agents persistent memory for repositories. It creates a `.context/` directory with structured knowledge (facts, decisions, regressions, session logs) that agents can search and write to.
 
 **Language:** TypeScript (ESM, strict mode)
 **Runtime:** Node.js 18+
@@ -22,7 +22,7 @@ src/commands/serve.ts        → Starts MCP server
 src/commands/setup.ts        → Configures Claude/Cursor/Copilot integration
 src/mcp/server.ts            → MCP server with 4 tools
 src/lib/ai-provider.ts       → Multi-provider AI abstraction (Anthropic/OpenAI/Gemini/Grok)
-src/lib/config.ts            → Configuration loading (.repo-context.json)
+src/lib/config.ts            → Configuration loading (.repomemory.json)
 src/lib/context-store.ts     → CRUD for .context/ files
 src/lib/search.ts            → SQLite FTS5 full-text search
 src/lib/git.ts               → Git log/diff parsing
@@ -99,7 +99,7 @@ For proper testing, use a spawned process that keeps stdin open (see Claude Code
 
 ## What the Output Looks Like
 
-When a user runs `repo-context analyze` on their project, it generates:
+When a user runs `repomemory analyze` on their project, it generates:
 
 ```
 .context/

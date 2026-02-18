@@ -1,10 +1,10 @@
 {
-  "name": "repo-context",
+  "name": "repomemory",
   "version": "0.1.0",
   "description": "Your repo remembers what every AI session learned. Persistent, structured memory for AI coding agents.",
   "type": "module",
   "bin": {
-    "repo-context": "./dist/index.js"
+    "repomemory": "dist/index.js"
   },
   "scripts": {
     "build": "node scripts/build.js",
@@ -14,11 +14,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DanielGuru/repo-context.git"
+    "url": "git+https://github.com/DanielGuru/repomemory.git"
   },
-  "homepage": "https://github.com/DanielGuru/repo-context#readme",
+  "homepage": "https://github.com/DanielGuru/repomemory#readme",
   "bugs": {
-    "url": "https://github.com/DanielGuru/repo-context/issues"
+    "url": "https://github.com/DanielGuru/repomemory/issues"
   },
   "keywords": [
     "ai",

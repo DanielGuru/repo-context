@@ -29,7 +29,7 @@ export async function startMcpServer(
 
   const server = new Server(
     {
-      name: "repo-context",
+      name: "repomemory",
       version: "0.1.0",
     },
     {
@@ -161,7 +161,7 @@ export async function startMcpServer(
             content: [
               {
                 type: "text" as const,
-                text: "No .context/ directory found. Run `repo-context init && repo-context analyze` to set up.",
+                text: "No .context/ directory found. Run `repomemory init && repomemory analyze` to set up.",
               },
             ],
           };
@@ -260,7 +260,7 @@ export async function startMcpServer(
             content: [
               {
                 type: "text" as const,
-                text: "No .context/ directory found. Run `repo-context init` first.",
+                text: "No .context/ directory found. Run `repomemory init` first.",
               },
             ],
           };
@@ -273,7 +273,7 @@ export async function startMcpServer(
             content: [
               {
                 type: "text" as const,
-                text: `No entries found${category ? ` in ${category}` : ""}. Run \`repo-context analyze\` to populate, or use context_write to add entries.`,
+                text: `No entries found${category ? ` in ${category}` : ""}. Run \`repomemory analyze\` to populate, or use context_write to add entries.`,
               },
             ],
           };
@@ -352,7 +352,7 @@ export async function startMcpServer(
     const entries = store.listEntries();
     return {
       resources: entries.map((entry) => ({
-        uri: `repo-context://${entry.category}/${entry.filename}`,
+        uri: `repomemory://${entry.category}/${entry.filename}`,
         name: `${entry.category}/${entry.filename}`,
         description: entry.title,
         mimeType: "text/markdown",
@@ -362,7 +362,7 @@ export async function startMcpServer(
 
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const uri = request.params.uri;
-    const match = uri.match(/^repo-context:\/\/([^/]+)\/(.+)$/);
+    const match = uri.match(/^repomemory:\/\/([^/]+)\/(.+)$/);
 
     if (!match) {
       throw new Error(`Invalid URI: ${uri}`);

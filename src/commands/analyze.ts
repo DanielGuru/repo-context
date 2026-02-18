@@ -174,7 +174,7 @@ function repairTruncatedJSON(json: string): string {
   return text;
 }
 
-const ANALYSIS_SYSTEM_PROMPT = `You are repo-context, an expert at analyzing codebases and creating structured knowledge bases for AI coding agents.
+const ANALYSIS_SYSTEM_PROMPT = `You are repomemory, an expert at analyzing codebases and creating structured knowledge bases for AI coding agents.
 
 Your job is to analyze a repository and produce a comprehensive, well-organized knowledge base that helps AI agents (Claude Code, Cursor, Copilot, etc.) work effectively in this codebase from the very first message.
 
@@ -379,7 +379,7 @@ export async function analyzeCommand(options: {
   console.log();
   console.log(chalk.bold("Next:"));
   console.log(`  ${chalk.dim("•")} Review .context/ files and edit as needed`);
-  console.log(`  ${chalk.dim("•")} Run ${chalk.cyan("repo-context serve")} to start the MCP server`);
+  console.log(`  ${chalk.dim("•")} Run ${chalk.cyan("repomemory serve")} to start the MCP server`);
   console.log(`  ${chalk.dim("•")} Commit .context/ to git to share with your team`);
 }
 

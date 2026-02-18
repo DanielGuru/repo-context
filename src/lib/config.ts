@@ -85,7 +85,7 @@ const DEFAULT_CONFIG: RepoContextConfig = {
 };
 
 export function loadConfig(repoRoot: string): RepoContextConfig {
-  const configPath = join(repoRoot, ".repo-context.json");
+  const configPath = join(repoRoot, ".repomemory.json");
 
   if (!existsSync(configPath)) {
     return { ...DEFAULT_CONFIG };
@@ -118,7 +118,7 @@ export function resolveApiKey(config: RepoContextConfig): string {
     const key = process.env.ANTHROPIC_API_KEY;
     if (key) return key;
     throw new Error(
-      "No API key found. Set ANTHROPIC_API_KEY environment variable or add apiKey to .repo-context.json"
+      "No API key found. Set ANTHROPIC_API_KEY environment variable or add apiKey to .repomemory.json"
     );
   }
 
@@ -126,7 +126,7 @@ export function resolveApiKey(config: RepoContextConfig): string {
     const key = process.env.OPENAI_API_KEY;
     if (key) return key;
     throw new Error(
-      "No API key found. Set OPENAI_API_KEY environment variable or add apiKey to .repo-context.json"
+      "No API key found. Set OPENAI_API_KEY environment variable or add apiKey to .repomemory.json"
     );
   }
 

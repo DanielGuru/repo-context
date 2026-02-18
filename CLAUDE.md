@@ -1,11 +1,11 @@
-# repo-context — Agent Instructions
+# repomemory — Agent Instructions
 
 ## What This Is
 
 A CLI tool + MCP server that gives AI coding agents persistent, structured memory for repositories. Agents can search and write knowledge that persists across sessions.
 
-**npm package:** `repo-context`
-**Repo:** https://github.com/DanielGuru/repo-context
+**npm package:** `repomemory`
+**Repo:** https://github.com/DanielGuru/repomemory
 
 ## Architecture
 
@@ -13,7 +13,7 @@ A CLI tool + MCP server that gives AI coding agents persistent, structured memor
 src/
 ├── index.ts                  # CLI entry point (Commander.js). Global error handler at bottom.
 ├── commands/
-│   ├── init.ts               # Scaffolds .context/ directory + .repo-context.json config
+│   ├── init.ts               # Scaffolds .context/ directory + .repomemory.json config
 │   ├── analyze.ts            # AI-powered repo analysis. THE key file — has the system prompt,
 │   │                           JSON extraction/repair logic, and orchestration.
 │   ├── sync.ts               # Reads git log → writes to .context/changelog/YYYY-MM.md
@@ -25,7 +25,7 @@ src/
 └── lib/
     ├── ai-provider.ts        # Multi-provider abstraction (Anthropic, OpenAI, Gemini, Grok).
     │                           Anthropic uses streaming. Grok uses OpenAI-compatible API.
-    ├── config.ts              # Loads .repo-context.json, merges with defaults. Provider type here.
+    ├── config.ts              # Loads .repomemory.json, merges with defaults. Provider type here.
     ├── context-store.ts       # CRUD for .context/ files. Read/write/append/list entries.
     ├── search.ts              # SQLite FTS5 full-text search index over .context/ files.
     ├── git.ts                 # Git log parsing, diff summaries, contributor info.

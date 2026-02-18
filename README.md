@@ -1,11 +1,11 @@
-# repo-context
+# repomemory
 
 **Your repo remembers what every AI session learned.**
 
 Persistent, structured memory for AI coding agents. Stop wasting the first 10 minutes of every session re-discovering your architecture.
 
 ```
-repo-context init && repo-context analyze
+npx repomemory init && npx repomemory analyze
 ```
 
 That's it. Your repo now has a `.context/` directory with AI-generated knowledge that persists across sessions.
@@ -25,7 +25,7 @@ Your CLAUDE.md / .cursorrules helps, but it's a static file you manually maintai
 
 ## The Solution
 
-`repo-context` creates a structured knowledge base that AI agents can search, read, and **write to** during sessions:
+`repomemory` creates a structured knowledge base that AI agents can search, read, and **write to** during sessions:
 
 ```
 .context/
@@ -51,7 +51,7 @@ Your CLAUDE.md / .cursorrules helps, but it's a static file you manually maintai
 ### 1. Install and Initialize
 
 ```bash
-npx repo-context init
+npx repomemory init
 ```
 
 ### 2. Set Your API Key
@@ -67,7 +67,7 @@ export GROK_API_KEY=...                # Grok
 ### 3. Analyze Your Repo
 
 ```bash
-npx repo-context analyze
+npx repomemory analyze
 ```
 
 This scans your entire codebase — file structure, key configs, database schemas, git history — and uses AI to generate structured knowledge files. Takes 2-5 minutes depending on repo size.
@@ -76,20 +76,20 @@ This scans your entire codebase — file structure, key configs, database schema
 
 ```bash
 # Claude Code
-npx repo-context setup claude
+npx repomemory setup claude
 
 # Cursor
-npx repo-context setup cursor
+npx repomemory setup cursor
 
 # GitHub Copilot
-npx repo-context setup copilot
+npx repomemory setup copilot
 ```
 
 ### 5. Commit to Git
 
 ```bash
 git add .context/
-git commit -m "Add repo-context knowledge base"
+git commit -m "Add repomemory knowledge base"
 ```
 
 Your entire team now shares the knowledge.
@@ -99,7 +99,7 @@ Your entire team now shares the knowledge.
 The real power is the MCP server, which gives AI agents tools to **search and write** context:
 
 ```bash
-npx repo-context serve
+npx repomemory serve
 ```
 
 ### Tools Exposed
@@ -111,7 +111,7 @@ npx repo-context serve
 | `context_list` | Browse all entries by category |
 | `context_read` | Read a specific context file |
 
-When configured via `repo-context setup claude`, the MCP server auto-starts with Claude Code. Your agent can:
+When configured via `repomemory setup claude`, the MCP server auto-starts with Claude Code. Your agent can:
 
 ```
 Agent: "Let me search for context about the authentication flow..."
@@ -125,7 +125,7 @@ Agent: "I discovered a race condition in token refresh. Let me record this."
 
 ## Configuration
 
-Create `.repo-context.json` in your repo root:
+Create `.repomemory.json` in your repo root:
 
 ```json
 {
@@ -153,24 +153,24 @@ Create `.repo-context.json` in your repo root:
 
 | Command | Description |
 |---------|-------------|
-| `repo-context init` | Scaffold `.context/` directory |
-| `repo-context analyze` | AI-powered repo analysis (generates all context files) |
-| `repo-context sync` | Sync recent git history to `changelog/` |
-| `repo-context serve` | Start MCP server for AI agent integration |
-| `repo-context setup <tool>` | Configure Claude Code, Cursor, or Copilot |
-| `repo-context status` | Show current context state |
+| `repomemory init` | Scaffold `.context/` directory |
+| `repomemory analyze` | AI-powered repo analysis (generates all context files) |
+| `repomemory sync` | Sync recent git history to `changelog/` |
+| `repomemory serve` | Start MCP server for AI agent integration |
+| `repomemory setup <tool>` | Configure Claude Code, Cursor, or Copilot |
+| `repomemory status` | Show current context state |
 
 ### Options
 
 ```bash
 # Use a specific provider
-repo-context analyze --provider openai --model gpt-4o
+repomemory analyze --provider openai --model gpt-4o
 
 # Analyze a different directory
-repo-context analyze --dir /path/to/repo
+repomemory analyze --dir /path/to/repo
 
 # Verbose output
-repo-context analyze --verbose
+repomemory analyze --verbose
 ```
 
 ## How It Works
@@ -194,14 +194,14 @@ repo-context analyze --verbose
 ### Git Sync (`sync`)
 
 ```bash
-repo-context sync
+repomemory sync
 ```
 
 Reads recent git commits and writes them to `changelog/YYYY-MM.md`. Run periodically or as a post-merge hook.
 
 ## Why Not Just Use CLAUDE.md?
 
-| | CLAUDE.md | repo-context |
+| | CLAUDE.md | repomemory |
 |--|-----------|-------------|
 | **Maintenance** | Manual | AI-generated + agent-maintained |
 | **Search** | Load everything | FTS5 search, return only relevant |
@@ -210,11 +210,11 @@ Reads recent git commits and writes them to `changelog/YYYY-MM.md`. Run periodic
 | **Decisions** | Mixed in with instructions | Structured, searchable, prevents re-debating |
 | **Regressions** | Not tracked | Explicit files preventing repeat bugs |
 
-`repo-context` doesn't replace CLAUDE.md — it complements it. Your CLAUDE.md stays for instructions and rules. `.context/` holds the knowledge that grows over time.
+`repomemory` doesn't replace CLAUDE.md — it complements it. Your CLAUDE.md stays for instructions and rules. `.context/` holds the knowledge that grows over time.
 
 ## Inspired By
 
-- **[OpenClaw](https://github.com/openclaw/openclaw)** — The memory architecture (tiers, temporal decay, hybrid search) inspired this project. OpenClaw remembers *you*. repo-context remembers *your codebase*.
+- **[OpenClaw](https://github.com/openclaw/openclaw)** — The memory architecture (tiers, temporal decay, hybrid search) inspired this project. OpenClaw remembers *you*. repomemory remembers *your codebase*.
 - **[Aider](https://aider.chat/)** — Repo maps and convention files showed the value of structured context.
 - **Context Engineering** — The emerging discipline of curating what AI models see for better outcomes.
 

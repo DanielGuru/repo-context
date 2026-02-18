@@ -15,7 +15,7 @@ export async function syncCommand(options: {
   const store = new ContextStore(repoRoot, config);
 
   if (!store.exists()) {
-    console.log(chalk.red("✗ No .context/ directory found. Run `repo-context init` first."));
+    console.log(chalk.red("✗ No .context/ directory found. Run `repomemory init` first."));
     process.exit(1);
   }
 
