@@ -35,46 +35,50 @@ export async function setupCommand(
 }
 
 function setupClaude(_repoRoot: string) {
-  // Write to global ~/.claude/settings.json — this is what Claude Code actually reads
-  // Project-level .claude/settings.json doesn't reliably load MCP servers
+  // Claude Code reads MCP servers from ~/.claude.json (NOT ~/.claude/settings.json)
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
-  const globalClaudeDir = join(homeDir, ".claude");
-  mkdirSync(globalClaudeDir, { recursive: true });
+  const configPath = join(homeDir, ".claude.json");
 
-  const globalSettingsPath = join(globalClaudeDir, "settings.json");
-  let settings: Record<string, unknown> = {};
+  let config: Record<string, unknown> = {};
 
-  if (existsSync(globalSettingsPath)) {
+  if (existsSync(configPath)) {
     try {
-      settings = JSON.parse(readFileSync(globalSettingsPath, "utf-8"));
+      config = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
-      // Start fresh
+      console.log(chalk.red("\u2717 Could not parse ~/.claude.json. Is Claude Code installed?"));
+      process.exit(1);
     }
+  } else {
+    console.log(chalk.red("\u2717 ~/.claude.json not found. Install Claude Code first."));
+    console.log(chalk.dim("  https://docs.anthropic.com/en/docs/claude-code"));
+    process.exit(1);
   }
 
-  const mcpServers = (settings.mcpServers || {}) as Record<string, unknown>;
+  const mcpServers = (config.mcpServers || {}) as Record<string, unknown>;
 
   // Check if already configured
   if (mcpServers["repomemory"]) {
     console.log(chalk.green("\n\u2713 Claude Code already configured with repomemory.\n"));
-    console.log(chalk.dim(`  Config: ${globalSettingsPath}`));
-    console.log(chalk.dim("  Restart Claude Code if it's running to pick up changes."));
+    console.log(chalk.dim(`  Config: ${configPath}`));
+    console.log(chalk.dim("  Restart Claude Code to pick up any changes."));
     return;
   }
 
   mcpServers["repomemory"] = {
+    type: "stdio",
     command: "npx",
     args: ["-y", "repomemory", "serve"],
+    env: {},
   };
-  settings.mcpServers = mcpServers;
+  config.mcpServers = mcpServers;
 
-  writeFileSync(globalSettingsPath, JSON.stringify(settings, null, 2) + "\n");
+  writeFileSync(configPath, JSON.stringify(config, null, 2));
 
   console.log(chalk.green("\n\u2713 Claude Code configured!\n"));
-  console.log(chalk.bold(`Added to ${globalSettingsPath}:`));
+  console.log(chalk.bold(`Added to ${configPath}:`));
   console.log(chalk.dim(JSON.stringify({ "repomemory": mcpServers["repomemory"] }, null, 2)));
   console.log();
-  console.log(chalk.dim("The MCP server will auto-start when you open Claude Code in any project."));
+  console.log(chalk.dim("Restart Claude Code to activate. The MCP server will auto-start in every project."));
   console.log(chalk.dim("In repos without .context/, the tools are inert (no noise, no errors)."));
   console.log(chalk.dim("Run `repomemory init && repomemory analyze` in each repo you want to use it."));
   console.log();
