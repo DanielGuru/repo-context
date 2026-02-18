@@ -139,6 +139,23 @@ Agent: "I discovered a race condition in token refresh. Let me record this."
 -> Persisted. Detects if it supersedes an existing entry.
 ```
 
+### What's New in v1.4
+
+**CLI Search** — Search your knowledge base from the terminal. Invaluable for debugging "why doesn't the agent know X?"
+
+```bash
+repomemory search "authentication"
+repomemory search "why drizzle" --category decisions --detail full
+```
+
+**Post-Commit Context Hook** — `repomemory setup claude` now installs a Claude Code hook that fires after git commits, reminding the agent to record what it learned using `context_write`. This is the biggest gap in agent memory — they commit code but don't write down what they discovered. The hook fixes that automatically.
+
+**Embedding Provider in Setup** — The wizard now asks which embedding provider you want for semantic search (auto-detects available API keys). The `go` and `init` commands accept `--embedding-provider` so you're not stuck with hidden defaults in `.repomemory.json`.
+
+**Smarter Session Capture** — Sessions are now captured when anything was written OR 3+ tool calls were made. Previously required both 3+ calls AND 60+ seconds, which silently lost short productive sessions.
+
+**Staleness Warnings** — `context_auto_orient` now flags entries untouched for 30+ days so agents know which context might be outdated.
+
 ### What's New in v1.2
 
 **Global Developer Context** — Your coding preferences now follow you across all repos. A global context store at `~/.repomemory/global/` is auto-created on first run. The `preferences/` category defaults to global scope — write once, available everywhere. Repo-level preferences override global when needed.
@@ -264,6 +281,7 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 | `repomemory sync` | Sync git history to changelog |
 | `repomemory serve` | Start MCP server |
 | `repomemory setup <tool>` | Configure AI tool integration |
+| `repomemory search <query>` | Search knowledge base from terminal |
 | `repomemory status` | Show context coverage and freshness |
 | `repomemory dashboard` | Open web dashboard |
 | `repomemory hook install` | Auto-sync changelog on git commits |

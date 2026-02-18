@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 
@@ -34,12 +34,13 @@ export async function setupCommand(
   }
 }
 
-function setupClaude(_repoRoot: string) {
-  // Claude Code reads MCP servers from ~/.claude.json (NOT ~/.claude/settings.json)
+function setupClaude(repoRoot: string) {
+  // --- Part 1: Global MCP server in ~/.claude.json ---
   const homeDir = process.env.HOME || process.env.USERPROFILE || "";
   const configPath = join(homeDir, ".claude.json");
 
   let config: Record<string, unknown> = {};
+  let mcpAlreadyConfigured = false;
 
   if (existsSync(configPath)) {
     try {
@@ -56,31 +57,125 @@ function setupClaude(_repoRoot: string) {
 
   const mcpServers = (config.mcpServers || {}) as Record<string, unknown>;
 
-  // Check if already configured
   if (mcpServers["repomemory"]) {
+    mcpAlreadyConfigured = true;
+  } else {
+    mcpServers["repomemory"] = {
+      type: "stdio",
+      command: "npx",
+      args: ["-y", "repomemory", "serve"],
+      env: {},
+    };
+    config.mcpServers = mcpServers;
+    writeFileSync(configPath, JSON.stringify(config, null, 2));
+  }
+
+  // --- Part 2: Project-level post-commit hook in .claude/settings.json ---
+  const claudeDir = join(repoRoot, ".claude");
+  const settingsPath = join(claudeDir, "settings.json");
+
+  let projectSettings: Record<string, unknown> = {};
+  let hookAlreadyConfigured = false;
+
+  if (existsSync(settingsPath)) {
+    try {
+      projectSettings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    } catch {
+      // Malformed — start fresh
+    }
+  }
+
+  // Check if hook already exists
+  const existingHooks = projectSettings.hooks as Record<string, unknown[]> | undefined;
+  if (existingHooks?.PostToolUse) {
+    const hasRepomemoryHook = JSON.stringify(existingHooks.PostToolUse).includes("repomemory");
+    if (hasRepomemoryHook) {
+      hookAlreadyConfigured = true;
+    }
+  }
+
+  if (!hookAlreadyConfigured) {
+    mkdirSync(claudeDir, { recursive: true });
+
+    // Write hook script
+    const hooksDir = join(claudeDir, "hooks");
+    mkdirSync(hooksDir, { recursive: true });
+    const hookScriptPath = join(hooksDir, "post-commit-context.sh");
+
+    if (!existsSync(hookScriptPath)) {
+      const hookScript = `#!/bin/bash
+# repomemory: remind agent to record context after git commits
+# Installed by: repomemory setup claude
+
+INPUT=$(cat)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+
+if [ -z "$COMMAND" ]; then
+  exit 0
+fi
+
+if echo "$COMMAND" | grep -q "git commit"; then
+  cat <<'REMINDER'
+You just committed code. Before continuing, record what you learned using repomemory:
+- Decisions made → context_write(category="decisions", ...)
+- Bugs found or fixed → context_write(category="regressions", ...)
+- Architecture learned → context_write(category="facts", ...)
+REMINDER
+fi
+
+exit 0
+`;
+      writeFileSync(hookScriptPath, hookScript);
+      chmodSync(hookScriptPath, "755");
+    }
+
+    const postToolUseHook = {
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command: ".claude/hooks/post-commit-context.sh",
+        },
+      ],
+    };
+
+    if (!projectSettings.hooks) {
+      projectSettings.hooks = {};
+    }
+    const hooks = projectSettings.hooks as Record<string, unknown[]>;
+    if (!hooks.PostToolUse) {
+      hooks.PostToolUse = [];
+    }
+    hooks.PostToolUse.push(postToolUseHook);
+
+    writeFileSync(settingsPath, JSON.stringify(projectSettings, null, 2) + "\n");
+  }
+
+  // --- Output ---
+  if (mcpAlreadyConfigured && hookAlreadyConfigured) {
     console.log(chalk.green("\n\u2713 Claude Code already configured with repomemory.\n"));
-    console.log(chalk.dim(`  Config: ${configPath}`));
+    console.log(chalk.dim(`  MCP server: ${configPath}`));
+    console.log(chalk.dim(`  Post-commit hook: ${settingsPath}`));
     console.log(chalk.dim("  Restart Claude Code to pick up any changes."));
     return;
   }
 
-  mcpServers["repomemory"] = {
-    type: "stdio",
-    command: "npx",
-    args: ["-y", "repomemory", "serve"],
-    env: {},
-  };
-  config.mcpServers = mcpServers;
-
-  writeFileSync(configPath, JSON.stringify(config, null, 2));
-
   console.log(chalk.green("\n\u2713 Claude Code configured!\n"));
-  console.log(chalk.bold(`Added to ${configPath}:`));
-  console.log(chalk.dim(JSON.stringify({ "repomemory": mcpServers["repomemory"] }, null, 2)));
-  console.log();
+
+  if (!mcpAlreadyConfigured) {
+    console.log(chalk.bold(`MCP server added to ${configPath}:`));
+    console.log(chalk.dim(JSON.stringify({ "repomemory": mcpServers["repomemory"] }, null, 2)));
+    console.log();
+  }
+
+  if (!hookAlreadyConfigured) {
+    console.log(chalk.bold(`Post-commit hook added to ${settingsPath}`));
+    console.log(chalk.dim("  After git commits, Claude will be reminded to record context."));
+    console.log();
+  }
+
   console.log(chalk.dim("Restart Claude Code to activate. The MCP server will auto-start in every project."));
   console.log(chalk.dim("In repos without .context/, the tools are inert (no noise, no errors)."));
-  console.log(chalk.dim("Run `repomemory init && repomemory analyze` in each repo you want to use it."));
   console.log();
   console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient"));
 }
