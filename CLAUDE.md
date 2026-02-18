@@ -172,7 +172,7 @@ Anthropic SDK error. The provider already uses `.stream()`. If you see this, som
 
 - `@anthropic-ai/sdk` — Claude API (streaming)
 - `@google/generative-ai` — Gemini API + embeddings
-- `openai` — OpenAI + Grok + embeddings (text-embedding-3-small)
+- `openai` — OpenAI + Grok + embeddings (text-embedding-3-small, falls back after Gemini in auto-detect)
 - `@modelcontextprotocol/sdk` — MCP server protocol
 - `sql.js` — Wasm SQLite for FTS5 search (zero native deps)
 - `commander` — CLI framework

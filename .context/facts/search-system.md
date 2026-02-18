@@ -7,7 +7,7 @@ Hybrid search combining FTS5 keyword search (sql.js Wasm SQLite) with optional v
 
 ## How It Works
 1. **FTS5 keyword search** — always available, uses sql.js (Wasm SQLite, no native deps)
-2. **Vector search** — optional, requires embedding API key (OpenAI `text-embedding-3-small` or Gemini)
+2. **Vector search** — optional, requires embedding API key (Gemini `text-embedding-004` default, free; or OpenAI `text-embedding-3-small` as fallback)
 3. **Hybrid scoring** — `alpha * keywordScore + (1 - alpha) * semanticScore`
 4. **Fallback** — gracefully falls back to keyword-only when no embedding key available
 
@@ -36,7 +36,7 @@ Hybrid search combining FTS5 keyword search (sql.js Wasm SQLite) with optional v
 ## Configuration
 ```json
 {
-  "embeddingProvider": "openai",  // or "gemini"
+  "embeddingProvider": "gemini",  // or "openai" — gemini is default (free, strong on code)
   "searchAlpha": 0.5              // keyword vs semantic weight
 }
 ```

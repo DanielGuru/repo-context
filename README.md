@@ -173,7 +173,7 @@ repomemory search "why drizzle" --category decisions --detail full
 <details>
 <summary>v1.1 changelog</summary>
 
-**Hybrid Search** — Keyword search (FTS5) + optional vector/semantic search via OpenAI or Gemini embeddings. Falls back to keyword-only when no embedding API key is available. Configure with `embeddingProvider` in `.repomemory.json`.
+**Hybrid Search** — Keyword search (FTS5) + optional vector/semantic search via Gemini or OpenAI embeddings. Falls back to keyword-only when no embedding API key is available. Gemini `text-embedding-004` is the default (free); configure with `embeddingProvider` in `.repomemory.json`.
 
 **Intelligent Category Routing** — Search queries are auto-routed to the most relevant category. "Why did we use X" routes to `decisions/`. "Bug in login" routes to `regressions/`. "Coding style" routes to `preferences/`. If no results found, retries across all categories.
 
@@ -254,7 +254,7 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 | `gemini` | gemini-2.0-flash, gemini-2.5-pro | `GEMINI_API_KEY` / `GOOGLE_API_KEY` |
 | `grok` | grok-3, grok-3-mini | `GROK_API_KEY` / `XAI_API_KEY` |
 
-**Embeddings** (optional, for semantic search): OpenAI `text-embedding-3-small` or Gemini `text-embedding-004`. Auto-detected from available API keys.
+**Embeddings** (optional, for semantic search): Gemini `text-embedding-004` (default, free) or OpenAI `text-embedding-3-small`. Auto-detected from available API keys — Gemini is preferred when both are present.
 
 ## Supported AI Tools
 
@@ -301,7 +301,7 @@ Create `.repomemory.json` in your repo root:
   "maxGitCommits": 100,
   "ignorePatterns": [],
   "keyFilePatterns": [],
-  "embeddingProvider": "openai",
+  "embeddingProvider": "gemini",
   "hybridAlpha": 0.5,
   "enableGlobalContext": true,
   "globalContextDir": "~/.repomemory/global"

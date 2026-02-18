@@ -41,14 +41,19 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
  *
  * Resolution order:
  * 1. If config.provider is explicitly set, use that
- * 2. If OPENAI_API_KEY is available, use OpenAI text-embedding-3-small
- * 3. If GEMINI_API_KEY or GOOGLE_API_KEY is available, use Gemini text-embedding-004
+ * 2. If GEMINI_API_KEY or GOOGLE_API_KEY is available, use Gemini text-embedding-004 (free, strong on code)
+ * 3. If OPENAI_API_KEY is available, use OpenAI text-embedding-3-small
  * 4. Return null (keyword search only)
+ *
+ * Why Gemini first? text-embedding-004 is free, performs comparably to text-embedding-3-small on
+ * technical/code content, and most repomemory users already have a Gemini key (used for analysis).
+ * OpenAI is kept as a fallback for users who explicitly want it or don't have a Gemini key.
+ * Set `embeddingProvider: "openai"` in .repomemory.json to force OpenAI.
  */
 export async function createEmbeddingProvider(
   config: EmbeddingConfig
 ): Promise<EmbeddingProvider | null> {
-  // Explicit provider in config
+  // Explicit provider in config takes priority
   if (config.provider === "openai") {
     const apiKey = config.apiKey || process.env.OPENAI_API_KEY;
     if (apiKey) {
@@ -67,19 +72,19 @@ export async function createEmbeddingProvider(
     }
   }
 
-  // Auto-detect: prefer OpenAI (cheaper, higher quality)
+  // Auto-detect: prefer Gemini (free, strong on technical/code content)
   if (!config.provider) {
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (openaiKey) {
-      return createOpenAIEmbeddingProvider(openaiKey, config.model);
-    }
-
     const geminiKey =
       process.env.GEMINI_API_KEY ||
       process.env.GOOGLE_API_KEY ||
       process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (geminiKey) {
       return createGeminiEmbeddingProvider(geminiKey, config.model);
+    }
+
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      return createOpenAIEmbeddingProvider(openaiKey, config.model);
     }
   }
 
