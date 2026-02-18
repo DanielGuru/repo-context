@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "repomemory": {
+      "command": "npx",
+      "args": ["-y", "repomemory", "serve"]
+    }
+  }
+}

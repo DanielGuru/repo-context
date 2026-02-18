@@ -1,0 +1,8 @@
+{
+  "name": "repomemory",
+  "version": "0.2.1",
+  "description": "Persistent, structured memory for AI coding agents. Your codebase never forgets.",
+  "author": "DanielGuru",
+  "homepage": "https://github.com/DanielGuru/repomemory",
+  "license": "MIT"
+}

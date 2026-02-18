@@ -71,6 +71,13 @@ export async function startMcpServer(
             },
             required: ["query"],
           },
+          annotations: {
+            title: "Search Context",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+          },
         },
         {
           name: "context_write",
@@ -107,6 +114,13 @@ export async function startMcpServer(
             },
             required: ["category", "filename", "content"],
           },
+          annotations: {
+            title: "Write Context",
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: false,
+            openWorldHint: false,
+          },
         },
         {
           name: "context_delete",
@@ -127,6 +141,13 @@ export async function startMcpServer(
             },
             required: ["category", "filename"],
           },
+          annotations: {
+            title: "Delete Context",
+            readOnlyHint: false,
+            destructiveHint: true,
+            idempotentHint: true,
+            openWorldHint: false,
+          },
         },
         {
           name: "context_list",
@@ -141,6 +162,13 @@ export async function startMcpServer(
                 description: "Optional: filter to a specific category.",
               },
             },
+          },
+          annotations: {
+            title: "List Context",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
           },
         },
         {
@@ -160,6 +188,13 @@ export async function startMcpServer(
               },
             },
             required: ["category", "filename"],
+          },
+          annotations: {
+            title: "Read Context",
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
           },
         },
       ],

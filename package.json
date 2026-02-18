@@ -1,6 +1,6 @@
 {
   "name": "repomemory",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Your codebase never forgets. Persistent, structured memory for AI coding agents.",
   "type": "module",
   "bin": {
@@ -74,6 +74,10 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    ".claude-plugin",
+    ".mcp.json",
+    "skills",
+    "server.json"
   ]
 }

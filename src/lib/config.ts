@@ -36,7 +36,7 @@ export interface RepoContextConfig {
 
 export const DEFAULT_CONFIG: RepoContextConfig = {
   provider: "anthropic",
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-4-6",
   ignorePatterns: [
     "node_modules",
     ".git",

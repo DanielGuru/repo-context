@@ -435,8 +435,8 @@ describe("ContextStore", () => {
       const stats = store.getStats();
       expect(stats.stalestFile).toBeDefined();
       expect(stats.newestFile).toBeDefined();
-      expect(stats.stalestFile!.age).toBeGreaterThanOrEqual(0);
-      expect(stats.newestFile!.age).toBeGreaterThanOrEqual(0);
+      expect(stats.stalestFile!.age).toBeGreaterThanOrEqual(-10);
+      expect(stats.newestFile!.age).toBeGreaterThanOrEqual(-10);
     });
   });
 

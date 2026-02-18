@@ -1,0 +1,46 @@
+{
+  "$schema": "https://registry.modelcontextprotocol.io/schema/server.json",
+  "name": "io.github.DanielGuru/repomemory",
+  "description": "Persistent, structured memory for AI coding agents. Your codebase never forgets.",
+  "version": "0.2.1",
+  "packages": [
+    {
+      "registry": "npm",
+      "name": "repomemory",
+      "version": "0.2.1",
+      "runtime": "node",
+      "args": ["dist/mcp/server.js"]
+    }
+  ],
+  "repository": {
+    "url": "https://github.com/DanielGuru/repomemory"
+  },
+  "tools": [
+    {
+      "name": "context_search",
+      "description": "Search the repository's persistent knowledge base"
+    },
+    {
+      "name": "context_write",
+      "description": "Write knowledge to persistent memory"
+    },
+    {
+      "name": "context_delete",
+      "description": "Delete stale knowledge entries"
+    },
+    {
+      "name": "context_list",
+      "description": "List all knowledge entries"
+    },
+    {
+      "name": "context_read",
+      "description": "Read a specific context file"
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "categories": ["memory", "coding-agents", "knowledge-base"],
+      "tags": ["ai-memory", "context-engineering", "mcp", "claude-code", "cursor", "copilot"]
+    }
+  }
+}

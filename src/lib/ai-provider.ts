@@ -95,8 +95,9 @@ export function estimateCost(
 ): string {
   // Approximate pricing per 1M tokens (as of 2025)
   const pricing: Record<string, { input: number; output: number }> = {
+    "claude-sonnet-4-6": { input: 3, output: 15 },
     "claude-sonnet-4-5-20250929": { input: 3, output: 15 },
-    "claude-opus-4-6": { input: 15, output: 75 },
+    "claude-opus-4-6": { input: 5, output: 25 },
     "gpt-4o": { input: 2.5, output: 10 },
     "o3-mini": { input: 1.1, output: 4.4 },
     "gemini-2.0-flash": { input: 0.1, output: 0.4 },
@@ -133,7 +134,7 @@ async function createAnthropicProvider(apiKey: string, model: string): Promise<A
 
       try {
         const stream = client.messages.stream({
-          model: model || "claude-sonnet-4-5-20250929",
+          model: model || "claude-sonnet-4-6",
           max_tokens: maxTokens,
           temperature,
           system: systemMsg?.content || "",
