@@ -143,6 +143,16 @@ Anthropic SDK error. The provider already uses `.stream()`. If you see this, som
 - `@clack/prompts` — Beautiful interactive CLI prompts
 - `zod` — Schema validation
 
+## Releasing
+
+Auto-publishing is configured via GitHub Actions. To release a new version:
+
+1. Bump version in `package.json`
+2. Commit the change
+3. Tag and push: `git tag v1.x.x && git push origin v1.x.x`
+
+The `release.yml` workflow handles build, test, and `npm publish` with provenance automatically. The `NPM_TOKEN` secret is already configured in the repo.
+
 ## Don't
 
 - Don't change the `.context/` directory structure without updating `context-store.ts`, `search.ts`, AND `server.ts`

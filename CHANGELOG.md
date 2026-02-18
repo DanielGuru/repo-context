@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.1.1 (2026-02-18)
+
+### Security
+- Fix path traversal in `readEntry`/`deleteEntry` — category now validated before file access
+- Fix path traversal in MCP resource handler — validate category extracted from URI
+- Fix XSS in dashboard — sanitize `marked.parse` output (strip scripts, event handlers)
+- Fix dashboard CORS — restrict to same origin, bind to `127.0.0.1` only
+- Fix shell injection — use `execFile` instead of `exec` for browser open
+
+### Bug Fixes
+- Fix version drift — `serve.ts` showed v0.2.0, `server.ts` hardcoded 1.1.0 (now imported from package.json)
+- Fix `appendEntry` — no longer prepends blank lines on new files
+- Fix `detectQueryCategory` false positives — "pattern"/"format" no longer misroute to preferences
+- Fix dashboard search dedup — match by `category/filename` not just `filename`
+- Fix FTS5 OR fallback — construct independent query instead of reusing params
+- Fix Float32Array buffer sharing — copy buffer to avoid sql.js internal reuse
+- Fix cleanup double-fire — guard against concurrent SIGTERM/SIGINT
+- Fix sql.js singleton — allow retry on init failure
+- Fix hook uninstall — marker-based removal avoids over-matching other hooks
+- Fix `server.json` entry point — args now point to correct CLI path
+- Fix unicode filenames — hash-based fallback for all-non-ASCII input
+
+### Performance
+- Search `rebuild()` is now incremental — preserves existing embeddings across restarts
+- Gemini embedding calls parallelized in chunks of 5 (was sequential)
+- Embedding dimensions detected dynamically (was hardcoded to 1536)
+
+### Internal
+- Extract `STARTER_INDEX` and `writeDefaultConfigFile` to eliminate init/go duplication
+- Wizard uses shared helpers directly (no interleaved console output)
+- Remove dead `initialized` field from SearchIndex
+- Add `context_auto_orient` to serve.ts tool log
+- 5 new tests (146 total): path traversal, unicode filenames, appendEntry, preferences category
+
 ## 1.1.0 (2026-02-18)
 
 ### New Features
