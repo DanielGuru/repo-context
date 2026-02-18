@@ -57,14 +57,23 @@ export async function goCommand(options: {
     console.log(chalk.cyan(`${currentStep}/${totalSteps}`) + " Initializing .context/ directory...");
     store.scaffold();
     store.writeIndex(STARTER_INDEX);
-    writeDefaultConfigFile(repoRoot, config.provider, config.model, options.embeddingProvider);
 
-    // Show embedding status
-    const embeddingLabel = options.embeddingProvider
-      ? options.embeddingProvider
-      : (process.env.OPENAI_API_KEY ? "openai (auto-detected)"
-        : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) ? "gemini (auto-detected)"
-        : "none (keyword search only)");
+    // Auto-detect embedding provider from env if not explicitly set
+    let embeddingProvider = options.embeddingProvider;
+    let embeddingLabel: string;
+    if (embeddingProvider) {
+      embeddingLabel = embeddingProvider;
+    } else if (process.env.OPENAI_API_KEY) {
+      embeddingProvider = "openai";
+      embeddingLabel = "openai (auto-detected from OPENAI_API_KEY)";
+    } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+      embeddingProvider = "gemini";
+      embeddingLabel = "gemini (auto-detected from GEMINI_API_KEY)";
+    } else {
+      embeddingLabel = "none (keyword search only — set OPENAI_API_KEY for semantic search)";
+    }
+
+    writeDefaultConfigFile(repoRoot, config.provider, config.model, embeddingProvider);
     steps.push(`Initialized .context/ directory (embeddings: ${embeddingLabel})`);
   } else {
     console.log(chalk.dim(`${currentStep}/${totalSteps} .context/ already exists. Skipping init.`));
