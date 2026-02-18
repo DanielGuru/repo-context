@@ -65,7 +65,7 @@ export class ContextStore {
 
     const gitignorePath = join(this.contextDir, ".gitignore");
     if (!existsSync(gitignorePath)) {
-      writeFileSync(gitignorePath, ".search.db\n.search.db-*\n.last-response.txt\n");
+      writeFileSync(gitignorePath, ".search.db\n.search.db-*\n.last-response.txt\n.last-sync\n.last-sync-hash\n");
     }
   }
 
@@ -163,18 +163,14 @@ export class ContextStore {
 
   readEntry(category: string, filename: string): string | null {
     this.validateCategory(category);
-    const filePath = join(this.contextDir, category, filename);
-    if (!existsSync(filePath)) {
-      // Try sanitized version
-      const sanitized = this.sanitizeFilename(filename);
-      const altPath = join(this.contextDir, category, sanitized);
-      if (!existsSync(altPath)) return null;
-      return readFileSync(altPath, "utf-8");
-    }
+    const sanitized = this.sanitizeFilename(filename);
+    const filePath = join(this.contextDir, category, sanitized);
+    if (!existsSync(filePath)) return null;
     return readFileSync(filePath, "utf-8");
   }
 
   listEntries(category?: string): ContextEntry[] {
+    if (category) this.validateCategory(category);
     const entries: ContextEntry[] = [];
 
     const dirsToScan = category

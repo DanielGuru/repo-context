@@ -49,22 +49,30 @@ npm run test:watch
 
 ```
 src/
-├── index.ts                  # CLI entry point (Commander.js)
+├── index.ts                  # CLI entry point (Commander.js). 11 commands.
 ├── commands/
 │   ├── init.ts               # Scaffolds .context/ directory
-│   ├── analyze.ts            # AI-powered repo analysis (core logic)
+│   ├── analyze.ts            # AI-powered repo analysis
 │   ├── sync.ts               # Git log -> changelog sync
 │   ├── serve.ts              # Starts MCP server
-│   └── setup.ts              # Configures editor integrations
+│   ├── setup.ts              # Configures 7 editor integrations
+│   ├── status.ts             # Coverage and freshness display
+│   ├── wizard.ts             # Interactive guided setup
+│   ├── dashboard.ts          # Web UI on localhost
+│   ├── hook.ts               # Git hook install/uninstall
+│   ├── go.ts                 # One-command setup flow
+│   └── global.ts             # Global context management
 ├── mcp/
-│   └── server.ts             # MCP server with 4 tools + resources
+│   └── server.ts             # MCP server with 6 tools + resources
 └── lib/
     ├── ai-provider.ts        # Multi-provider AI abstraction
-    ├── config.ts              # Configuration loading and defaults
-    ├── context-store.ts       # CRUD for .context/ files
-    ├── search.ts              # FTS5 full-text search index
-    ├── git.ts                 # Git log parsing and diff summaries
-    └── repo-scanner.ts        # Repository tree walking and detection
+    ├── config.ts             # Configuration loading and defaults
+    ├── context-store.ts      # CRUD for .context/ files
+    ├── search.ts             # Hybrid FTS5 + vector search
+    ├── embeddings.ts         # Embedding provider abstraction
+    ├── git.ts                # Git log parsing and diff summaries
+    ├── json-repair.ts        # AI JSON output repair
+    └── repo-scanner.ts       # Repository tree walking and detection
 ```
 
 ## Code Style

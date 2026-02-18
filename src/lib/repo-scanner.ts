@@ -50,6 +50,8 @@ const LANGUAGE_MAP: Record<string, string> = {
   ".lua": "Lua",
 };
 
+const ALLOWED_DOTDIRS = new Set([".github", ".vscode", ".cursor"]);
+
 const BINARY_EXTENSIONS = new Set([
   ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp", ".avif",
   ".woff", ".woff2", ".ttf", ".eot", ".otf",
@@ -142,7 +144,7 @@ export function scanRepo(
     }
 
     const filtered = entries.filter(
-      (e) => !shouldIgnore(e, allIgnorePatterns) && !e.startsWith(".")
+      (e) => !shouldIgnore(e, allIgnorePatterns) && (!e.startsWith(".") || ALLOWED_DOTDIRS.has(e))
     );
 
     filtered.forEach((entry, idx) => {

@@ -247,7 +247,7 @@ async function createGeminiProvider(apiKey: string, model: string): Promise<AIPr
         };
       } catch (err) {
         const e = err as Error & { status?: number };
-        throw new AIError(e.message, "gemini", e.status, true);
+        throw new AIError(e.message, "gemini", e.status, e.status === 429 || e.status === 500 || e.status === 503);
       }
     },
   };

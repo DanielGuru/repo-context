@@ -1,6 +1,9 @@
 // Build script: compiles TypeScript and adds shebang to CLI entry point
 import { execSync } from "child_process";
-import { readFileSync, writeFileSync, chmodSync } from "fs";
+import { readFileSync, writeFileSync, chmodSync, rmSync } from "fs";
+
+// 0. Clean dist directory
+rmSync("dist", { recursive: true, force: true });
 
 // 1. Run tsc
 console.log("Compiling TypeScript...");

@@ -98,8 +98,14 @@ export async function initCommand(options: { dir?: string; provider?: string }) 
 
   console.log(chalk.bold("Next steps:\n"));
 
+  const keyExamples: Record<string, string> = {
+    anthropic: "export ANTHROPIC_API_KEY=sk-ant-...",
+    openai: "export OPENAI_API_KEY=sk-...",
+    gemini: "export GEMINI_API_KEY=...",
+    grok: "export GROK_API_KEY=...",
+  };
   console.log(`  ${chalk.cyan("1.")} Set your API key:`);
-  console.log(chalk.dim(`     export ANTHROPIC_API_KEY=sk-ant-...`));
+  console.log(chalk.dim(`     ${keyExamples[config.provider] || keyExamples.anthropic}`));
   console.log();
 
   console.log(`  ${chalk.cyan("2.")} Analyze your repo:`);

@@ -18,12 +18,24 @@ export function extractJSON<T = unknown>(raw: string): T {
     text = fenceMatch[1].trim();
   }
 
-  // Strategy 2: Find first { to last }
-  if (!text.startsWith("{")) {
+  // Strategy 2: Find first { to last } or first [ to last ]
+  if (!text.startsWith("{") && !text.startsWith("[")) {
     const firstBrace = text.indexOf("{");
+    const firstBracket = text.indexOf("[");
     const lastBrace = text.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      text = text.slice(firstBrace, lastBrace + 1);
+    const lastBracket = text.lastIndexOf("]");
+
+    let start = -1, end = -1;
+    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+      start = firstBrace;
+      end = lastBrace;
+    } else if (firstBracket !== -1) {
+      start = firstBracket;
+      end = lastBracket;
+    }
+
+    if (start !== -1 && end > start) {
+      text = text.slice(start, end + 1);
     }
   }
 

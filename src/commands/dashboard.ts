@@ -162,11 +162,12 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
   });
 
   // Graceful shutdown
-  process.on("SIGTERM", () => { server.close(); process.exit(0); });
-  process.on("SIGINT", () => { server.close(); process.exit(0); });
+  process.on("SIGTERM", () => { if (searchIndex) searchIndex.close(); server.close(); process.exit(0); });
+  process.on("SIGINT", () => { if (searchIndex) searchIndex.close(); server.close(); process.exit(0); });
 }
 
 function buildDashboardHTML(provider: string, model: string): string {
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -528,7 +529,7 @@ function buildDashboardHTML(provider: string, model: string): string {
 <div class="header">
   <h1><span class="logo">\u25c9 repomemory</span> <span style="color:var(--text-dim);font-weight:400;font-size:14px">dashboard</span></h1>
   <div class="meta">
-    <span>${provider} \u00b7 ${model}</span>
+    <span>${esc(provider)} \u00b7 ${esc(model)}</span>
     <button class="export-btn" onclick="exportAll()">\u2913 Export</button>
   </div>
 </div>

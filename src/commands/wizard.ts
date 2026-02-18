@@ -35,7 +35,6 @@ const PROVIDER_INFO: Record<string, { envVar: string; label: string; hint: strin
 export async function wizardCommand(options: { dir?: string }) {
   const repoRoot = options.dir || process.cwd();
 
-  console.clear();
   p.intro(chalk.bgCyan.black(" repomemory ") + chalk.dim(" Your codebase never forgets."));
 
   // Step 1: Check if already initialized

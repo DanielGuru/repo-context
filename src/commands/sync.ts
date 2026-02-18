@@ -73,7 +73,7 @@ export async function syncCommand(options: {
 
   if (existingChangelog) {
     const existingHashes = new Set(
-      [...existingChangelog.matchAll(/\b([a-f0-9]{7,})\b/g)].map((m) => m[1])
+      [...existingChangelog.matchAll(/^([a-f0-9]{7,40})\s/gm)].map((m) => m[1])
     );
     newCommitLines = commitLines.filter((line) => {
       const hashMatch = line.match(/^([a-f0-9]{7,})\s/);

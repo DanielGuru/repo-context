@@ -60,7 +60,7 @@ function installHook(repoRoot: string) {
 
   if (existsSync(hookPath)) {
     const existing = readFileSync(hookPath, "utf-8");
-    if (existing.includes("repomemory")) {
+    if (existing.includes(HOOK_MARKER_START)) {
       console.log(chalk.yellow("\u26a0  post-commit hook already has repomemory."));
       return;
     }

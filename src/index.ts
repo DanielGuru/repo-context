@@ -39,8 +39,7 @@ program
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .option(
     "-p, --provider <provider>",
-    "AI provider (anthropic, openai, gemini, grok)",
-    "anthropic"
+    "AI provider (anthropic, openai, gemini, grok)"
   )
   .action(initCommand);
 
@@ -111,6 +110,7 @@ program
   .description("One-command setup — init, analyze, and configure Claude Code in one flow")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
+  .option("-m, --model <model>", "Model to use (provider-specific)")
   .option("--skip-analyze", "Skip the analysis step", false)
   .action(goCommand);
 
@@ -175,13 +175,19 @@ process.on("uncaughtException", (err) => {
     console.error(`\n\u2717 ${msg}`);
   }
 
+  if (process.env.REPOMEMORY_DEBUG) {
+    console.error(err.stack || "");
+  }
   process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
   const msg = reason instanceof Error ? reason.message : String(reason);
   console.error(`\n\u2717 ${msg}`);
+  if (process.env.REPOMEMORY_DEBUG && reason instanceof Error) {
+    console.error(reason.stack || "");
+  }
   process.exit(1);
 });
 
-program.parse();
+program.parseAsync();

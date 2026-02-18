@@ -42,6 +42,8 @@ async function getSqlJs(): Promise<SqlJsStatic> {
 
 export class SearchIndex {
   private db: SqlJsDatabase | null = null;
+  private initPromise: Promise<SqlJsDatabase> | null = null;
+  private dirty = false;
   private dbPath: string;
   private store: ContextStore;
   private hasFts5 = false;
@@ -62,7 +64,13 @@ export class SearchIndex {
 
   private async ensureDb(): Promise<SqlJsDatabase> {
     if (this.db) return this.db;
+    if (this.initPromise) return this.initPromise;
 
+    this.initPromise = this._initDb();
+    return this.initPromise;
+  }
+
+  private async _initDb(): Promise<SqlJsDatabase> {
     const SQL = await getSqlJs();
 
     // Try to load existing DB from disk
@@ -92,6 +100,13 @@ export class SearchIndex {
             this.db.close();
             this.db = new SQL.Database();
             this.initSchema();
+            // FTS5 state was set from old DB — re-detect after fresh init
+            try {
+              this.db.exec("SELECT * FROM documents_fts LIMIT 0");
+              this.hasFts5 = true;
+            } catch {
+              this.hasFts5 = false;
+            }
           }
         }
 
@@ -269,7 +284,7 @@ export class SearchIndex {
       try {
         const embeddings = await this.embeddingProvider.embed(texts);
         for (let j = 0; j < batch.length; j++) {
-          const blob = new Uint8Array(embeddings[j].buffer);
+          const blob = new Uint8Array(embeddings[j].buffer, embeddings[j].byteOffset, embeddings[j].byteLength);
           this.db!.run(
             "UPDATE documents SET embedding = ?, embedding_dims = ? WHERE category = ? AND filename = ?",
             [blob, this.embeddingProvider.dimensions, batch[j].category, batch[j].filename]
@@ -298,7 +313,7 @@ export class SearchIndex {
       try {
         const textToEmbed = `${entry.title}\n\n${entry.content}`.slice(0, 8000);
         const [embedding] = await this.embeddingProvider.embed([textToEmbed]);
-        embeddingBlob = new Uint8Array(embedding.buffer);
+        embeddingBlob = new Uint8Array(embedding.buffer, embedding.byteOffset, embedding.byteLength);
         dims = this.embeddingProvider.dimensions;
       } catch {
         // Silently fall back to keyword-only for this entry
@@ -320,7 +335,7 @@ export class SearchIndex {
       ]
     );
 
-    this.save();
+    this.dirty = true;
   }
 
   async removeEntry(category: string, filename: string): Promise<void> {
@@ -329,7 +344,7 @@ export class SearchIndex {
       "DELETE FROM documents WHERE category = ? AND filename = ?",
       [category, filename]
     );
-    this.save();
+    this.dirty = true;
   }
 
   async search(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
@@ -348,6 +363,9 @@ export class SearchIndex {
       const semanticResults = await this.searchSemantic(query, category, limit * 2);
       if (semanticResults.length === 0) {
         return keywordResults.slice(0, limit);
+      }
+      if (keywordResults.length === 0) {
+        return semanticResults.slice(0, limit);
       }
       return this.hybridMerge(keywordResults, semanticResults, query, limit);
     } catch {
@@ -445,10 +463,11 @@ export class SearchIndex {
     }
 
     let sql = `
-      SELECT category, filename, title, content, relative_path,
-             (${scoreParts.join(" + ")}) as score
-      FROM documents
-      WHERE score > 0
+      SELECT * FROM (
+        SELECT category, filename, title, content, relative_path,
+               (${scoreParts.join(" + ")}) as score
+        FROM documents
+      ) WHERE score > 0
     `;
 
     if (category) {
@@ -627,7 +646,10 @@ export class SearchIndex {
 
   close(): void {
     if (this.db) {
-      this.save();
+      if (this.dirty) {
+        this.save();
+        this.dirty = false;
+      }
       this.db.close();
       this.db = null;
     }

@@ -65,8 +65,9 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
 
   if (!defaultBranch) {
     const branches = git(["branch", "-a"], repoRoot);
-    if (branches.includes("main")) defaultBranch = "main";
-    else if (branches.includes("master")) defaultBranch = "master";
+    const branchList = branches.split("\n").map(b => b.trim().replace(/^\* /, ""));
+    if (branchList.some(b => b === "main" || b === "origin/main")) defaultBranch = "main";
+    else if (branchList.some(b => b === "master" || b === "origin/master")) defaultBranch = "master";
     else defaultBranch = currentBranch;
   }
 
@@ -94,7 +95,7 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
   const commitLog = git(
     [
       "log",
-      `--format=%H|%h|%an|%ai|%s`,
+      `--format=%H%x00%h%x00%an%x00%ai%x00%s`,
       "--shortstat",
       "-n",
       String(maxCommits),
@@ -107,12 +108,12 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    if (!line || !line.includes("|")) {
+    if (!line || !line.includes("\0")) {
       i++;
       continue;
     }
 
-    const parts = line.split("|");
+    const parts = line.split("\0");
     if (parts.length < 5) {
       i++;
       continue;
@@ -142,7 +143,7 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
       shortHash: parts[1],
       author: parts[2],
       date: parts[3],
-      message: parts.slice(4).join("|"),
+      message: parts.slice(4).join("\0"),
       filesChanged,
       insertions,
       deletions,

@@ -86,25 +86,20 @@ export function buildSessionSummary(session: SessionTracker, durationSeconds: nu
  * understanding the "why" is usually more actionable. The caller retries without
  * category filter if the routed search returns 0 results.
  */
+const CATEGORY_PATTERNS: Array<{ pattern: RegExp; category: string }> = [
+  { pattern: /\b(why\b|chose|decision|alternatives?|trade.?off|instead of|reason\b)/, category: "decisions" },
+  { pattern: /\b(bug|broke|regression|crash|error\b|fail|fix\b|issues?\b|problem|broken)/, category: "regressions" },
+  { pattern: /\b(prefer(?:red|ence|s)?|coding style|naming convention|indent(?:ation)?|lint(?:ing)?|tab(?:s|\s+vs|\s+or)|code format(?:ting)?)/, category: "preferences" },
+  { pattern: /\b(last session|previous session|yesterday|worked on|accomplished)/, category: "sessions" },
+  { pattern: /\b(how does|how do|architecture|schema|database|api|endpoint|flow|structure)/, category: "facts" },
+];
+
 export function detectQueryCategory(query: string): string | undefined {
   const q = query.toLowerCase();
-
-  // Decision-related queries — "why" is the strongest signal
-  if (/\b(why\b|chose|decision|alternatives?|trade.?off|instead of|reason\b)/.test(q)) return "decisions";
-
-  // Regression/bug queries
-  if (/\b(bug|broke|regression|crash|error\b|fail|fix\b|issues?\b|problem|broken)/.test(q)) return "regressions";
-
-  // Preference/style queries — require coding/style context to avoid false positives
-  if (/\b(prefer(?:red|ence|s)?|coding style|naming convention|indent(?:ation)?|lint(?:ing)?|tab(?:s|\s+vs|\s+or)|code format(?:ting)?)/.test(q)) return "preferences";
-
-  // Session queries
-  if (/\b(last session|previous session|yesterday|worked on|accomplished)/.test(q)) return "sessions";
-
-  // Architecture/fact queries
-  if (/\b(how does|architecture|schema|database|api|endpoint|flow|structure)/.test(q)) return "facts";
-
-  return undefined; // search all categories
+  for (const { pattern, category } of CATEGORY_PATTERNS) {
+    if (pattern.test(q)) return category;
+  }
+  return undefined;
 }
 
 export async function startMcpServer(
@@ -434,6 +429,7 @@ export async function startMcpServer(
             properties: {
               category: {
                 type: "string",
+                enum: VALID_CATEGORIES,
                 description: "The category (facts, decisions, regressions, sessions, changelog, preferences)",
               },
               filename: {
@@ -538,7 +534,7 @@ export async function startMcpServer(
 
         // Lazy-init repo search index
         if (repoExists && !searchIndex) {
-          searchIndex = new SearchIndex(store.path, store);
+          searchIndex = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
           await searchIndex.rebuild();
         }
 
@@ -711,16 +707,17 @@ export async function startMcpServer(
         // Auto-purge: detect potentially overlapping entries
         let supersededList: string[] = [];
         const searchTerms = filename.replace(/-/g, " ");
-        const meaningfulWords = searchTerms.split(/\s+/).filter((t: string) => t.length > 2);
+        const meaningfulWords = searchTerms.split(/\s+/).filter((t: string) => t.length > 1);
         if (!append && targetIndex && content.length >= 100 && meaningfulWords.length >= 2) {
           try {
             const existing = await targetIndex.search(searchTerms, category, 3);
+            const maxScore = existing.length > 0 ? Math.max(...existing.map(r => r.score)) : 0;
             supersededList = existing
               .filter((r) =>
                 r.category === category &&
                 r.filename !== filename + ".md" &&
                 r.filename !== filename &&
-                r.score > 5.0
+                r.score > maxScore * 0.3
               )
               .map((d) => `${d.category}/${d.filename} (score: ${d.score.toFixed(1)})`);
           } catch {
@@ -772,8 +769,6 @@ export async function startMcpServer(
           scope?: "repo" | "global";
         };
 
-        session.entriesDeleted.push(`${category}/${filename}`);
-
         if (!VALID_CATEGORIES.includes(category)) {
           return {
             content: [{
@@ -784,19 +779,26 @@ export async function startMcpServer(
           };
         }
 
+        session.entriesDeleted.push(`${category}/${filename}`);
+
         const fname = filename.endsWith(".md") ? filename : filename + ".md";
+        const defaultScope = resolveScope(category, explicitScope);
 
-        // Try explicit scope first, then fall back
+        // Try the default scope first (matches context_write routing)
         let deleted = false;
-        let deleteScope: "repo" | "global" = "repo";
+        let deleteScope: "repo" | "global" = defaultScope;
 
-        if (!explicitScope || explicitScope === "repo") {
-          deleted = store.deleteEntry(category, fname);
-          deleteScope = "repo";
-        }
-        if (!deleted && (!explicitScope || explicitScope === "global") && globalStore) {
-          deleted = globalStore.deleteEntry(category, fname);
-          deleteScope = "global";
+        const primaryStore = getStore(defaultScope);
+        deleted = primaryStore.deleteEntry(category, fname);
+
+        // Fall back to the other scope if not found and no explicit scope
+        if (!deleted && !explicitScope) {
+          const fallbackScope = defaultScope === "repo" ? "global" : "repo";
+          const fallbackStore = fallbackScope === "global" ? globalStore : store;
+          if (fallbackStore) {
+            deleted = fallbackStore.deleteEntry(category, fname);
+            deleteScope = fallbackScope;
+          }
         }
 
         if (!deleted) {
@@ -913,11 +915,11 @@ export async function startMcpServer(
           scope?: "repo" | "global";
         };
 
-        if (category && !VALID_CATEGORIES.includes(category)) {
+        if (!category || !VALID_CATEGORIES.includes(category)) {
           return {
             content: [{
               type: "text" as const,
-              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+              text: `Invalid category: ${category || "(empty)"}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
             }],
             isError: true,
           };
@@ -1052,7 +1054,8 @@ export async function startMcpServer(
           }
         }
 
-        return { content: [{ type: "text" as const, text: parts.join("\n") }] };
+        session.readCallCount++;
+        return { content: [{ type: "text" as const, text: parts.join("\n") + getWriteNudge() }] };
       }
 
       default:
@@ -1069,24 +1072,39 @@ export async function startMcpServer(
   // --- Resources ---
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    if (!store.exists()) {
-      return { resources: [] };
+    const resources: Array<{ uri: string; name: string; description: string; mimeType: string }> = [];
+
+    if (store.exists()) {
+      for (const entry of store.listEntries()) {
+        resources.push({
+          uri: `repomemory://${entry.category}/${entry.filename}`,
+          name: `${entry.category}/${entry.filename}`,
+          description: entry.title,
+          mimeType: "text/markdown",
+        });
+      }
     }
 
-    const entries = store.listEntries();
-    return {
-      resources: entries.map((entry) => ({
-        uri: `repomemory://${entry.category}/${entry.filename}`,
-        name: `${entry.category}/${entry.filename}`,
-        description: entry.title,
-        mimeType: "text/markdown",
-      })),
-    };
+    if (globalStore?.exists()) {
+      for (const entry of globalStore.listEntries()) {
+        resources.push({
+          uri: `repomemory-global://${entry.category}/${entry.filename}`,
+          name: `[global] ${entry.category}/${entry.filename}`,
+          description: entry.title,
+          mimeType: "text/markdown",
+        });
+      }
+    }
+
+    return { resources };
   });
 
   server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     const uri = request.params.uri;
-    const match = uri.match(/^repomemory:\/\/([^/]+)\/(.+)$/);
+    const repoMatch = uri.match(/^repomemory:\/\/([^/]+)\/(.+)$/);
+    const globalMatch = uri.match(/^repomemory-global:\/\/([^/]+)\/(.+)$/);
+    const match = repoMatch || globalMatch;
+    const isGlobal = !!globalMatch;
 
     if (!match) {
       throw new Error(`Invalid URI: ${uri}`);
@@ -1099,7 +1117,8 @@ export async function startMcpServer(
       throw new Error(`Invalid category in URI: ${category}`);
     }
 
-    const content = store.readEntry(category, filename);
+    const targetStore = isGlobal && globalStore ? globalStore : store;
+    const content = targetStore.readEntry(category, filename);
 
     if (!content) {
       throw new Error(`Resource not found: ${uri}`);
@@ -1123,7 +1142,7 @@ export async function startMcpServer(
 
     // Auto-write session summary if there was meaningful activity
     const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
-    const hasActivity = session.toolCalls.length > 2;
+    const hasActivity = session.toolCalls.length > 2 && duration > 60;
 
     if (hasActivity && store.exists()) {
       try {
@@ -1148,6 +1167,7 @@ export async function startMcpServer(
 
   process.on("SIGTERM", cleanup);
   process.on("SIGINT", cleanup);
+  process.stdin.on("end", cleanup);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

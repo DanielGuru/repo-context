@@ -120,7 +120,17 @@ export async function globalImportCommand() {
     input += chunk;
   }
 
-  const entries = JSON.parse(input) as Array<{ category: string; filename: string; content: string }>;
+  let entries: Array<{ category: string; filename: string; content: string }>;
+  try {
+    entries = JSON.parse(input);
+  } catch {
+    console.error(chalk.red("  Invalid JSON input. Expected an array of { category, filename, content } objects."));
+    process.exit(1);
+  }
+  if (!Array.isArray(entries)) {
+    console.error(chalk.red("  Expected a JSON array."));
+    process.exit(1);
+  }
   let count = 0;
 
   for (const entry of entries) {
