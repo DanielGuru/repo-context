@@ -5,6 +5,8 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ContextStore } from "../lib/context-store.js";
 import { SearchIndex } from "../lib/search.js";
@@ -31,15 +33,83 @@ export async function startMcpServer(
   const server = new Server(
     {
       name: "repomemory",
-      version: "0.2.0",
+      version: "1.0.0",
     },
     {
       capabilities: {
         tools: {},
         resources: {},
+        prompts: {},
       },
     }
   );
+
+  // --- Prompts ---
+
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: [
+      {
+        name: "start-task",
+        description: "Search for relevant context before starting a new task. Use this at the beginning of every coding session.",
+        arguments: [
+          {
+            name: "task",
+            description: "Brief description of what you're about to work on",
+            required: true,
+          },
+        ],
+      },
+      {
+        name: "end-session",
+        description: "Record what you accomplished and discovered during this session.",
+        arguments: [
+          {
+            name: "summary",
+            description: "What you worked on and any discoveries worth remembering",
+            required: true,
+          },
+        ],
+      },
+    ],
+  }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    if (name === "start-task") {
+      const task = (args?.task as string) || "general work";
+      return {
+        description: `Find relevant context for: ${task}`,
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `I'm about to work on: ${task}\n\nPlease search the repository's persistent knowledge base for any relevant context — architecture docs, past decisions, known regressions, or session notes that would help me be productive immediately. Use the context_search tool with relevant queries.`,
+            },
+          },
+        ],
+      };
+    }
+
+    if (name === "end-session") {
+      const summary = (args?.summary as string) || "session work";
+      return {
+        description: "Record session discoveries",
+        messages: [
+          {
+            role: "user" as const,
+            content: {
+              type: "text" as const,
+              text: `Session summary: ${summary}\n\nPlease record this in the repository's persistent memory using context_write with category "sessions" so future AI sessions can benefit from what we learned today.`,
+            },
+          },
+        ],
+      };
+    }
+
+    throw new Error(`Unknown prompt: ${name}`);
+  });
 
   // --- Tools ---
 

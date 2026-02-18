@@ -345,17 +345,32 @@ function buildDashboardHTML(provider: string, model: string): string {
 
   .detail-panel .md-content {
     font-size: 14px;
-    line-height: 1.7;
+    line-height: 1.8;
     color: var(--text);
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
   }
 
-  .detail-panel .md-content h1, .detail-panel .md-content h2, .detail-panel .md-content h3 {
-    color: var(--accent);
-    margin: 16px 0 8px;
+  .detail-panel .md-content h1 { font-size: 22px; color: var(--accent); margin: 24px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .detail-panel .md-content h2 { font-size: 18px; color: var(--accent); margin: 20px 0 10px; }
+  .detail-panel .md-content h3 { font-size: 15px; color: var(--purple); margin: 16px 0 8px; }
+  .detail-panel .md-content p { margin: 8px 0; }
+  .detail-panel .md-content ul, .detail-panel .md-content ol { margin: 8px 0; padding-left: 24px; }
+  .detail-panel .md-content li { margin: 4px 0; }
+  .detail-panel .md-content code {
+    background: var(--surface2); padding: 2px 6px; border-radius: 4px;
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 13px;
   }
+  .detail-panel .md-content pre {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; overflow-x: auto; margin: 12px 0;
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; line-height: 1.5;
+  }
+  .detail-panel .md-content pre code { background: none; padding: 0; }
+  .detail-panel .md-content strong { color: var(--text); font-weight: 600; }
+  .detail-panel .md-content blockquote {
+    border-left: 3px solid var(--accent); padding-left: 16px; margin: 12px 0;
+    color: var(--text-dim); font-style: italic;
+  }
+  .detail-panel .md-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
   .empty {
     text-align: center;
@@ -479,7 +494,7 @@ function showDetail(index) {
 
   document.getElementById('detailTitle').textContent = e.category + '/' + e.filename;
   document.getElementById('detailMeta').innerHTML = \`<span>\${e.title}</span> &middot; <span>\${(e.sizeBytes/1024).toFixed(1)}KB</span> &middot; <span>\${timeAgo(Date.now() - new Date(e.lastModified).getTime())}</span>\`;
-  document.getElementById('detailContent').textContent = e.content;
+  document.getElementById('detailContent').innerHTML = renderMarkdown(e.content);
   document.getElementById('detailOverlay').classList.add('visible');
 }
 
@@ -510,6 +525,30 @@ document.addEventListener('keydown', (e) => {
 
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMarkdown(md) {
+  var html = escapeHtml(md);
+  var BT = String.fromCharCode(96);
+  var codeBlockRe = new RegExp(BT+BT+BT+'(\\\\w*)?\\\\n([\\\\s\\\\S]*?)'+BT+BT+BT, 'g');
+  html = html.replace(codeBlockRe, function(_, lang, code) {
+    return '<pre><code>' + code.trim() + '</code></pre>';
+  });
+  var inlineCodeRe = new RegExp(BT+'([^'+BT+']+)'+BT, 'g');
+  html = html.replace(inlineCodeRe, '<code>\$1</code>');
+  html = html.replace(/^### (.+)\$/gm, '<h3>\$1</h3>');
+  html = html.replace(/^## (.+)\$/gm, '<h2>\$1</h2>');
+  html = html.replace(/^# (.+)\$/gm, '<h1>\$1</h1>');
+  html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>\$1</strong>');
+  html = html.replace(/\\*([^*]+)\\*/g, '<em>\$1</em>');
+  html = html.replace(/^&gt; (.+)\$/gm, '<blockquote>\$1</blockquote>');
+  html = html.replace(/^---\$/gm, '<hr>');
+  html = html.replace(/^- (.+)\$/gm, '<li>\$1</li>');
+  html = html.replace(/((<li>.*<\\/li>)\\n?)+/g, function(m) { return '<ul>' + m + '</ul>'; });
+  html = html.replace(/^\\d+\\. (.+)\$/gm, '<li>\$1</li>');
+  html = html.replace(/\\n\\n(?!<)/g, '</p><p>');
+  html = html.replace(/\\n(?!<)/g, '<br>');
+  return '<p>' + html + '</p>';
 }
 
 function timeAgo(ms) {

@@ -9,6 +9,7 @@ import { setupCommand } from "./commands/setup.js";
 import { statusCommand } from "./commands/status.js";
 import { wizardCommand } from "./commands/wizard.js";
 import { dashboardCommand } from "./commands/dashboard.js";
+import { hookCommand } from "./commands/hook.js";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -89,6 +90,12 @@ program
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .option("--port <port>", "Port to serve on", "3333")
   .action(dashboardCommand);
+
+program
+  .command("hook <action>")
+  .description("Manage git hooks (install, uninstall) — auto-sync changelog on commits")
+  .option("-d, --dir <path>", "Repository root directory", process.cwd())
+  .action(hookCommand);
 
 // Global error handlers
 process.on("uncaughtException", (err) => {
