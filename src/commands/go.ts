@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
+import * as p from "@clack/prompts";
 import { loadConfig, resolveGlobalDir } from "../lib/config.js";
 import type { Provider } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
@@ -12,11 +13,13 @@ import { setupCommand } from "./setup.js";
 export async function goCommand(options: {
   dir?: string;
   provider?: string;
+  model?: string;
   embeddingProvider?: string;
   skipAnalyze?: boolean;
 }) {
   const repoRoot = options.dir || process.cwd();
   const config = loadConfig(repoRoot);
+  const configPath = join(repoRoot, ".repomemory.json");
 
   if (options.provider) {
     const validProviders: Provider[] = ["anthropic", "openai", "gemini", "grok"];
@@ -29,7 +32,7 @@ export async function goCommand(options: {
 
   const store = new ContextStore(repoRoot, config);
   const steps: string[] = [];
-  let totalSteps = 5;
+  const totalSteps = 5;
   let currentStep = 0;
 
   console.log(chalk.bold("\nrepomemory go \u2014 one-command setup\n"));
@@ -51,32 +54,123 @@ export async function goCommand(options: {
     console.log(chalk.dim(`${currentStep}/${totalSteps} Global context disabled.`));
   }
 
-  // Step 1: Create .context/ if missing
+  // Step 1: Configure — ask about key settings if not provided via flags
   currentStep++;
-  if (!store.exists()) {
+  const isNewSetup = !existsSync(configPath);
+
+  // Determine embedding provider
+  let embeddingProvider = options.embeddingProvider || config.embeddingProvider;
+  if (!embeddingProvider) {
+    // Detect available keys
+    const embeddingKeys: { provider: string; label: string }[] = [];
+    if (process.env.OPENAI_API_KEY) {
+      embeddingKeys.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
+    }
+    if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      embeddingKeys.push({ provider: "gemini", label: "Gemini (text-embedding-004)" });
+    }
+
+    if (embeddingKeys.length > 0) {
+      const embeddingChoice = await p.select({
+        message: "Embedding provider for semantic search?",
+        options: [
+          ...embeddingKeys.map((k) => ({ value: k.provider, label: k.label })),
+          { value: "none", label: "None", hint: "Keyword search only \u2014 no API costs" },
+        ],
+      });
+
+      if (p.isCancel(embeddingChoice)) {
+        p.cancel("Setup cancelled.");
+        process.exit(0);
+      }
+
+      embeddingProvider = embeddingChoice === "none" ? undefined : (embeddingChoice as string);
+    } else {
+      console.log(chalk.dim(`${currentStep}/${totalSteps} No embedding API keys found. Using keyword search.`));
+      console.log(chalk.dim("  Set OPENAI_API_KEY or GEMINI_API_KEY to enable semantic search."));
+    }
+  }
+
+  // Determine max files for analysis
+  let maxFiles = config.maxFilesForAnalysis;
+  if (isNewSetup) {
+    const maxFilesChoice = await p.select({
+      message: `Max files to analyze? (your repo has many files)`,
+      options: [
+        { value: "80", label: "80 (default)", hint: "Fast, covers key files" },
+        { value: "150", label: "150", hint: "Good for medium repos" },
+        { value: "300", label: "300", hint: "Thorough, slower analysis" },
+      ],
+    });
+
+    if (p.isCancel(maxFilesChoice)) {
+      p.cancel("Setup cancelled.");
+      process.exit(0);
+    }
+
+    maxFiles = parseInt(maxFilesChoice as string, 10);
+  }
+
+  // Write or update config
+  if (isNewSetup) {
     console.log(chalk.cyan(`${currentStep}/${totalSteps}`) + " Initializing .context/ directory...");
     store.scaffold();
     store.writeIndex(STARTER_INDEX);
 
-    // Auto-detect embedding provider from env if not explicitly set
-    let embeddingProvider = options.embeddingProvider;
-    let embeddingLabel: string;
+    const configToWrite: Record<string, unknown> = {
+      provider: config.provider,
+      model: options.model || config.model,
+      contextDir: config.contextDir,
+      maxFilesForAnalysis: maxFiles,
+      maxGitCommits: config.maxGitCommits,
+      autoIndex: config.autoIndex,
+      ignorePatterns: [] as string[],
+      keyFilePatterns: [] as string[],
+    };
     if (embeddingProvider) {
-      embeddingLabel = embeddingProvider;
-    } else if (process.env.OPENAI_API_KEY) {
-      embeddingProvider = "openai";
-      embeddingLabel = "openai (auto-detected from OPENAI_API_KEY)";
-    } else if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
-      embeddingProvider = "gemini";
-      embeddingLabel = "gemini (auto-detected from GEMINI_API_KEY)";
-    } else {
-      embeddingLabel = "none (keyword search only — set OPENAI_API_KEY for semantic search)";
+      configToWrite.embeddingProvider = embeddingProvider;
+    }
+    writeFileSync(configPath, JSON.stringify(configToWrite, null, 2) + "\n");
+
+    const embeddingLabel = embeddingProvider || "none (keyword only)";
+    steps.push(`Initialized .context/ (embeddings: ${embeddingLabel}, maxFiles: ${maxFiles})`);
+  } else {
+    // Update existing config if new settings were chosen
+    let updated = false;
+    let existingConfig: Record<string, unknown> = {};
+    try {
+      existingConfig = JSON.parse(readFileSync(configPath, "utf-8"));
+    } catch {
+      existingConfig = {};
     }
 
-    writeDefaultConfigFile(repoRoot, config.provider, config.model, embeddingProvider);
-    steps.push(`Initialized .context/ directory (embeddings: ${embeddingLabel})`);
-  } else {
-    console.log(chalk.dim(`${currentStep}/${totalSteps} .context/ already exists. Skipping init.`));
+    if (embeddingProvider && !existingConfig.embeddingProvider) {
+      existingConfig.embeddingProvider = embeddingProvider;
+      updated = true;
+    }
+    if (maxFiles !== config.maxFilesForAnalysis) {
+      existingConfig.maxFilesForAnalysis = maxFiles;
+      updated = true;
+    }
+
+    if (updated) {
+      writeFileSync(configPath, JSON.stringify(existingConfig, null, 2) + "\n");
+      steps.push(`Updated .repomemory.json (embeddings: ${embeddingProvider || "unchanged"}, maxFiles: ${maxFiles})`);
+    }
+
+    if (!store.exists()) {
+      store.scaffold();
+      store.writeIndex(STARTER_INDEX);
+      steps.push("Initialized .context/ directory");
+    } else {
+      console.log(chalk.dim(`${currentStep}/${totalSteps} .context/ already exists.`));
+    }
+  }
+
+  // Update in-memory config for analysis
+  config.maxFilesForAnalysis = maxFiles;
+  if (embeddingProvider) {
+    config.embeddingProvider = embeddingProvider as "openai" | "gemini";
   }
 
   // Step 2: Configure Claude Code if possible
@@ -96,13 +190,13 @@ export async function goCommand(options: {
         console.log(chalk.cyan(`${currentStep}/${totalSteps}`) + " Adding MCP server to Claude Code...");
         try {
           await setupCommand("claude", { dir: repoRoot });
-          steps.push("Configured Claude Code MCP server");
+          steps.push("Configured Claude Code MCP server + post-commit hook");
           claudeConfigured = true;
         } catch {
           console.log(chalk.yellow(`  Warning: Failed to configure Claude Code. Run manually: npx repomemory setup claude`));
         }
       } else {
-        console.log(chalk.dim(`${currentStep}/${totalSteps} Claude Code already configured. Skipping.`));
+        console.log(chalk.dim(`${currentStep}/${totalSteps} Claude Code already configured.`));
         claudeConfigured = true;
       }
     } catch {
