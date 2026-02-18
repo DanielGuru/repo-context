@@ -56,12 +56,14 @@ export async function goCommand(options: {
 
   // Step 1: Configure — ask about key settings if not provided via flags
   currentStep++;
-  const isNewSetup = !existsSync(configPath);
 
-  // Determine embedding provider
-  let embeddingProvider = options.embeddingProvider || config.embeddingProvider;
-  if (!embeddingProvider) {
-    // Detect available keys
+  // Check if context needs populating — this is the real "first setup" signal
+  const existingEntries = store.exists() ? store.listEntries() : [];
+  const needsSetup = existingEntries.filter((e) => e.category === "facts").length === 0;
+
+  // Determine embedding provider — ask if context is empty (unless CLI flag provided)
+  let embeddingProvider = options.embeddingProvider;
+  if (!embeddingProvider && needsSetup) {
     const embeddingKeys: { provider: string; label: string }[] = [];
     if (process.env.OPENAI_API_KEY) {
       embeddingKeys.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
@@ -89,13 +91,15 @@ export async function goCommand(options: {
       console.log(chalk.dim(`${currentStep}/${totalSteps} No embedding API keys found. Using keyword search.`));
       console.log(chalk.dim("  Set OPENAI_API_KEY or GEMINI_API_KEY to enable semantic search."));
     }
+  } else if (!options.embeddingProvider) {
+    embeddingProvider = config.embeddingProvider;
   }
 
-  // Determine max files for analysis
+  // Determine max files for analysis — ask if context is empty
   let maxFiles = config.maxFilesForAnalysis;
-  if (isNewSetup) {
+  if (needsSetup) {
     const maxFilesChoice = await p.select({
-      message: `Max files to analyze? (your repo has many files)`,
+      message: `Max files to analyze?`,
       options: [
         { value: "80", label: "80 (default)", hint: "Fast, covers key files" },
         { value: "150", label: "150", hint: "Good for medium repos" },
@@ -111,61 +115,39 @@ export async function goCommand(options: {
     maxFiles = parseInt(maxFilesChoice as string, 10);
   }
 
-  // Write or update config
-  if (isNewSetup) {
-    console.log(chalk.cyan(`${currentStep}/${totalSteps}`) + " Initializing .context/ directory...");
+  // Scaffold .context/ if missing
+  if (!store.exists()) {
     store.scaffold();
     store.writeIndex(STARTER_INDEX);
+  }
 
-    const configToWrite: Record<string, unknown> = {
-      provider: config.provider,
-      model: options.model || config.model,
-      contextDir: config.contextDir,
-      maxFilesForAnalysis: maxFiles,
-      maxGitCommits: config.maxGitCommits,
-      autoIndex: config.autoIndex,
-      ignorePatterns: [] as string[],
-      keyFilePatterns: [] as string[],
-    };
-    if (embeddingProvider) {
-      configToWrite.embeddingProvider = embeddingProvider;
-    }
-    writeFileSync(configPath, JSON.stringify(configToWrite, null, 2) + "\n");
-
-    const embeddingLabel = embeddingProvider || "none (keyword only)";
-    steps.push(`Initialized .context/ (embeddings: ${embeddingLabel}, maxFiles: ${maxFiles})`);
-  } else {
-    // Update existing config if new settings were chosen
-    let updated = false;
-    let existingConfig: Record<string, unknown> = {};
+  // Write or update config with chosen settings
+  console.log(chalk.cyan(`${currentStep}/${totalSteps}`) + " Configuring .repomemory.json...");
+  let existingConfig: Record<string, unknown> = {};
+  if (existsSync(configPath)) {
     try {
       existingConfig = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
       existingConfig = {};
     }
-
-    if (embeddingProvider && !existingConfig.embeddingProvider) {
-      existingConfig.embeddingProvider = embeddingProvider;
-      updated = true;
-    }
-    if (maxFiles !== config.maxFilesForAnalysis) {
-      existingConfig.maxFilesForAnalysis = maxFiles;
-      updated = true;
-    }
-
-    if (updated) {
-      writeFileSync(configPath, JSON.stringify(existingConfig, null, 2) + "\n");
-      steps.push(`Updated .repomemory.json (embeddings: ${embeddingProvider || "unchanged"}, maxFiles: ${maxFiles})`);
-    }
-
-    if (!store.exists()) {
-      store.scaffold();
-      store.writeIndex(STARTER_INDEX);
-      steps.push("Initialized .context/ directory");
-    } else {
-      console.log(chalk.dim(`${currentStep}/${totalSteps} .context/ already exists.`));
-    }
   }
+
+  // Always apply the chosen/detected settings
+  existingConfig.provider = existingConfig.provider || config.provider;
+  existingConfig.model = options.model || existingConfig.model || config.model;
+  existingConfig.contextDir = existingConfig.contextDir || config.contextDir;
+  existingConfig.maxFilesForAnalysis = maxFiles;
+  existingConfig.maxGitCommits = existingConfig.maxGitCommits || config.maxGitCommits;
+  existingConfig.autoIndex = existingConfig.autoIndex ?? config.autoIndex;
+  if (!existingConfig.ignorePatterns) existingConfig.ignorePatterns = [];
+  if (!existingConfig.keyFilePatterns) existingConfig.keyFilePatterns = [];
+  if (embeddingProvider) {
+    existingConfig.embeddingProvider = embeddingProvider;
+  }
+
+  writeFileSync(configPath, JSON.stringify(existingConfig, null, 2) + "\n");
+  const embeddingLabel = embeddingProvider || existingConfig.embeddingProvider || "none";
+  steps.push(`Configured (embeddings: ${embeddingLabel}, maxFiles: ${maxFiles})`);
 
   // Update in-memory config for analysis
   config.maxFilesForAnalysis = maxFiles;
@@ -208,9 +190,7 @@ export async function goCommand(options: {
 
   // Step 3: Run analyze if context is mostly empty
   currentStep++;
-  const entries = store.exists() ? store.listEntries() : [];
-  const factsCount = entries.filter((e) => e.category === "facts").length;
-  const needsAnalysis = factsCount === 0 && !options.skipAnalyze;
+  const needsAnalysis = needsSetup && !options.skipAnalyze;
 
   if (needsAnalysis) {
     const hasKey = await validateApiKey(config);
