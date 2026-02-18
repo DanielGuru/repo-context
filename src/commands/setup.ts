@@ -107,20 +107,14 @@ function setupClaude(repoRoot: string) {
 # repomemory: remind agent to record context after git commits
 # Installed by: repomemory setup claude
 
-INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+# Read stdin, check for git commit without jq dependency
+INPUT=$(cat 2>/dev/null || true)
 
-if [ -z "$COMMAND" ]; then
-  exit 0
-fi
-
-if echo "$COMMAND" | grep -q "git commit"; then
-  cat <<'REMINDER'
-You just committed code. Before continuing, record what you learned using repomemory:
-- Decisions made → context_write(category="decisions", ...)
-- Bugs found or fixed → context_write(category="regressions", ...)
-- Architecture learned → context_write(category="facts", ...)
-REMINDER
+if echo "$INPUT" | grep -q '"git commit' 2>/dev/null; then
+  echo "You just committed code. Before continuing, record what you learned using repomemory:"
+  echo "- Decisions made -> context_write(category=\\"decisions\\", ...)"
+  echo "- Bugs found or fixed -> context_write(category=\\"regressions\\", ...)"
+  echo "- Architecture learned -> context_write(category=\\"facts\\", ...)"
 fi
 
 exit 0
@@ -134,7 +128,7 @@ exit 0
       hooks: [
         {
           type: "command",
-          command: ".claude/hooks/post-commit-context.sh",
+          command: `${repoRoot}/.claude/hooks/post-commit-context.sh`,
         },
       ],
     };
