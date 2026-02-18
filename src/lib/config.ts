@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 import { z } from "zod";
 
 const ProviderSchema = z.enum(["anthropic", "openai", "gemini", "grok"]);
@@ -22,6 +23,8 @@ const ConfigFileSchema = z.object({
   embeddingModel: z.string().optional(),
   embeddingApiKey: z.string().optional(),
   hybridAlpha: z.number().min(0).max(1).optional(),
+  enableGlobalContext: z.boolean().optional(),
+  globalContextDir: z.string().optional(),
 });
 
 export type Provider = z.infer<typeof ProviderSchema>;
@@ -43,6 +46,8 @@ export interface RepoContextConfig {
   embeddingModel?: string;
   embeddingApiKey?: string;
   hybridAlpha: number;
+  enableGlobalContext: boolean;
+  globalContextDir: string;
 }
 
 export const DEFAULT_CONFIG: RepoContextConfig = {
@@ -109,7 +114,14 @@ export const DEFAULT_CONFIG: RepoContextConfig = {
   autoIndex: true,
   contextDir: ".context",
   hybridAlpha: 0.5,
+  enableGlobalContext: true,
+  globalContextDir: "~/.repomemory/global",
 };
+
+/** Resolve ~ in globalContextDir to the user's home directory */
+export function resolveGlobalDir(config: RepoContextConfig): string {
+  return config.globalContextDir.replace(/^~/, homedir());
+}
 
 export function loadConfig(repoRoot: string): RepoContextConfig {
   const configPath = join(repoRoot, ".repomemory.json");
@@ -145,6 +157,8 @@ export function loadConfig(repoRoot: string): RepoContextConfig {
       ],
       categories: userConfig.categories || DEFAULT_CONFIG.categories,
       hybridAlpha: userConfig.hybridAlpha ?? DEFAULT_CONFIG.hybridAlpha,
+      enableGlobalContext: userConfig.enableGlobalContext ?? DEFAULT_CONFIG.enableGlobalContext,
+      globalContextDir: userConfig.globalContextDir ?? DEFAULT_CONFIG.globalContextDir,
     };
   } catch {
     return { ...DEFAULT_CONFIG };

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
-import { loadConfig } from "../lib/config.js";
+import { loadConfig, resolveGlobalDir } from "../lib/config.js";
 import type { Provider } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
 import { validateApiKey } from "../lib/ai-provider.js";
@@ -28,10 +28,27 @@ export async function goCommand(options: {
 
   const store = new ContextStore(repoRoot, config);
   const steps: string[] = [];
-  let totalSteps = 4;
+  let totalSteps = 5;
   let currentStep = 0;
 
   console.log(chalk.bold("\nrepomemory go \u2014 one-command setup\n"));
+
+  // Step 0: Ensure global context exists
+  currentStep++;
+  if (config.enableGlobalContext) {
+    const globalDir = resolveGlobalDir(config);
+    const globalStore = ContextStore.forAbsolutePath(globalDir);
+    if (!globalStore.exists()) {
+      console.log(chalk.cyan(`${currentStep}/${totalSteps}`) + " Setting up global developer profile...");
+      globalStore.scaffold();
+      steps.push(`Created ${globalDir} for developer preferences`);
+    } else {
+      const globalPrefs = globalStore.listEntries("preferences");
+      console.log(chalk.dim(`${currentStep}/${totalSteps} Global profile loaded (${globalPrefs.length} preference${globalPrefs.length !== 1 ? "s" : ""}).`));
+    }
+  } else {
+    console.log(chalk.dim(`${currentStep}/${totalSteps} Global context disabled.`));
+  }
 
   // Step 1: Create .context/ if missing
   currentStep++;

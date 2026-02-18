@@ -155,6 +155,35 @@ describe("SearchIndex", () => {
     index.close();
   });
 
+  it("returns empty results for empty query", async () => {
+    store.writeEntry("facts", "auth", "# Auth\n\nLogin uses OAuth2.");
+
+    const index = new SearchIndex(contextDir, store);
+    await index.rebuild();
+
+    const results1 = await index.search("");
+    expect(results1.length).toBe(0);
+
+    const results2 = await index.search("   ");
+    expect(results2.length).toBe(0);
+
+    index.close();
+  });
+
+  it("finds entries by category name", async () => {
+    store.writeEntry("regressions", "streaming-bug", "# Streaming Bug\n\nAnthropic SDK requires streaming.");
+    store.writeEntry("regressions", "config-issue", "# Config Issue\n\nWrong config file path.");
+
+    const index = new SearchIndex(contextDir, store);
+    await index.rebuild();
+
+    // Searching for the category name should match via the category column
+    const results = await index.search("regressions");
+    expect(results.length).toBeGreaterThan(0);
+
+    index.close();
+  });
+
   describe("hybridMerge", () => {
     it("merges overlapping results", async () => {
       const index = new SearchIndex(contextDir, store);
@@ -175,6 +204,27 @@ describe("SearchIndex", () => {
       // "a.md" should be highest (present in both)
       expect(merged[0].filename).toBe("a.md");
       expect(merged.length).toBe(3); // a, b, c
+      index.close();
+    });
+
+    it("preserves score spread without compressing to zero", async () => {
+      const index = new SearchIndex(contextDir, store);
+      await index.rebuild();
+
+      const keyword = [
+        { category: "facts", filename: "a.md", title: "A", snippet: "...", score: 8, relativePath: ".context/facts/a.md" },
+        { category: "facts", filename: "b.md", title: "B", snippet: "...", score: 10, relativePath: ".context/facts/b.md" },
+      ];
+      const semantic = [
+        { category: "facts", filename: "a.md", title: "A", snippet: "...", score: 0.85, relativePath: ".context/facts/a.md" },
+        { category: "facts", filename: "b.md", title: "B", snippet: "...", score: 0.90, relativePath: ".context/facts/b.md" },
+      ];
+
+      const merged = index.hybridMerge(keyword, semantic, "test", 5);
+      // b should be ranked higher (best in both keyword and semantic)
+      expect(merged[0].filename).toBe("b.md");
+      // Scores should have meaningful spread
+      expect(merged[0].score - merged[1].score).toBeGreaterThan(0);
       index.close();
     });
 

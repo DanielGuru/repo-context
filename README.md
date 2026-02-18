@@ -5,7 +5,7 @@
 **Your codebase never forgets.**
 
 AI agents lose context every session. repomemory fixes that.
-One command analyzes your repo and creates a persistent knowledge base that any AI tool can search, read, and write to — with hybrid keyword + semantic search, auto-session capture, and intelligent category routing.
+One command analyzes your repo and creates a persistent knowledge base that any AI tool can search, read, and write to — with hybrid keyword + semantic search, auto-session capture, intelligent category routing, and **global developer context** that follows you across all repos.
 
 [![npm version](https://img.shields.io/npm/v/repomemory.svg)](https://www.npmjs.com/package/repomemory)
 [![license](https://img.shields.io/npm/l/repomemory.svg)](https://github.com/DanielGuru/repomemory/blob/main/LICENSE)
@@ -58,17 +58,18 @@ repomemory creates a structured, searchable knowledge base that AI agents can **
 
 ## Quick Start
 
-### One-Command Setup (v1.1)
+### One-Command Setup
 
 ```bash
 npx repomemory go
 ```
 
 This single command:
-1. Creates `.context/` if it doesn't exist
-2. Configures Claude Code MCP server if installed
-3. Runs AI analysis if context is empty
-4. Prints CLAUDE.md instructions to copy-paste
+1. Sets up your global developer profile (`~/.repomemory/global/`) — your preferences follow you everywhere
+2. Creates `.context/` if it doesn't exist
+3. Configures Claude Code MCP server if installed
+4. Runs AI analysis if context is empty
+5. Prints CLAUDE.md instructions to copy-paste
 
 ### Interactive Setup
 
@@ -115,12 +116,12 @@ npx repomemory serve
 
 | Tool | What It Does |
 |------|-------------|
-| `context_search` | Hybrid keyword + semantic search with intelligent category routing |
-| `context_auto_orient` | One-call project orientation: index, preferences, recent sessions, recent changes |
-| `context_write` | Write entries with auto-purge detection and supersedes support |
-| `context_read` | Read a specific context file (full content) |
-| `context_list` | Browse all entries by category (compact or detailed) |
-| `context_delete` | Remove stale or incorrect knowledge |
+| `context_search` | Hybrid keyword + semantic search across repo + global. Intelligent category routing. Optional `scope` filter. |
+| `context_auto_orient` | One-call orientation: index, global + repo preferences, recent sessions, recent changes |
+| `context_write` | Write entries with scope routing (preferences→global). Auto-purge detection. Supersedes. |
+| `context_read` | Read full content. Repo-first, falls back to global. |
+| `context_list` | Browse entries from both stores with `[repo]`/`[global]` provenance tags. |
+| `context_delete` | Remove stale knowledge. Tries repo first, falls back to global. |
 
 When configured via `repomemory setup claude`, the MCP server auto-starts with Claude Code:
 
@@ -138,7 +139,22 @@ Agent: "I discovered a race condition in token refresh. Let me record this."
 -> Persisted. Detects if it supersedes an existing entry.
 ```
 
+### What's New in v1.2
+
+**Global Developer Context** — Your coding preferences now follow you across all repos. A global context store at `~/.repomemory/global/` is auto-created on first run. The `preferences/` category defaults to global scope — write once, available everywhere. Repo-level preferences override global when needed.
+
+**Scope Routing** — All MCP tools gain an optional `scope` parameter (`"repo"` or `"global"`). Defaults are automatic: preferences go global, everything else stays repo-local. Search merges results from both stores with repo-first dedup.
+
+**CLI: `repomemory global`** — New subcommand to manage global context directly: `list`, `read`, `write`, `delete`, `export`, `import`. Export/import enables backup and machine migration.
+
+**Unicode Filename Handling** — Accented characters are now transliterated (café → cafe) instead of stripped to hyphens. NFKD normalization preserves readable filenames.
+
+**Search Improvements** — Category column is now indexed in LIKE fallback search, so searching for "regressions" within the regressions category actually works. Score normalization no longer compresses ranges artificially.
+
 ### What's New in v1.1
+
+<details>
+<summary>v1.1 changelog</summary>
 
 **Hybrid Search** — Keyword search (FTS5) + optional vector/semantic search via OpenAI or Gemini embeddings. Falls back to keyword-only when no embedding API key is available. Configure with `embeddingProvider` in `.repomemory.json`.
 
@@ -155,6 +171,8 @@ Agent: "I discovered a race condition in token refresh. Let me record this."
 **One-Command Setup** — `npx repomemory go` replaces the 4-step init + analyze + setup + copy flow.
 
 **Dashboard Improvements** — Edit entries inline, server-side FTS5 search, real-time polling, JSON export, proper markdown rendering.
+
+</details>
 
 ### Web Dashboard
 
@@ -237,7 +255,7 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 
 | Command | Description |
 |---------|-------------|
-| `repomemory go` | One-command setup — init + analyze + configure (new in v1.1) |
+| `repomemory go` | One-command setup — global profile + init + analyze + configure |
 | `repomemory wizard` | Interactive guided setup (recommended for first use) |
 | `repomemory init` | Scaffold `.context/` directory |
 | `repomemory analyze` | AI-powered repo analysis |
@@ -249,6 +267,8 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 | `repomemory status` | Show context coverage and freshness |
 | `repomemory dashboard` | Open web dashboard |
 | `repomemory hook install` | Auto-sync changelog on git commits |
+| `repomemory global list` | List global developer context entries |
+| `repomemory global export` | Export global context as JSON (for backup/migration) |
 
 ## Configuration
 
@@ -264,7 +284,9 @@ Create `.repomemory.json` in your repo root:
   "ignorePatterns": [],
   "keyFilePatterns": [],
   "embeddingProvider": "openai",
-  "hybridAlpha": 0.5
+  "hybridAlpha": 0.5,
+  "enableGlobalContext": true,
+  "globalContextDir": "~/.repomemory/global"
 }
 ```
 
@@ -275,6 +297,10 @@ Custom `ignorePatterns` and `keyFilePatterns` are **additive** — they extend t
 - `embeddingModel`: Override the default embedding model
 - `embeddingApiKey`: Explicit API key for embeddings (falls back to env vars)
 - `hybridAlpha`: Weight between keyword (1.0) and semantic (0.0) search. Default: 0.5
+
+**Global context config**:
+- `enableGlobalContext`: `true` (default) — set to `false` to disable global context and behave like v1.1
+- `globalContextDir`: `"~/.repomemory/global"` (default) — path to global developer context
 
 ## How It Works
 

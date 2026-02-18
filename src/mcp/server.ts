@@ -9,9 +9,11 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { ContextStore } from "../lib/context-store.js";
+import type { ContextEntry } from "../lib/context-store.js";
 import { SearchIndex } from "../lib/search.js";
 import { createEmbeddingProvider } from "../lib/embeddings.js";
 import type { RepoContextConfig } from "../lib/config.js";
+import { resolveGlobalDir } from "../lib/config.js";
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
@@ -138,6 +140,48 @@ export async function startMcpServer(
     }
   }
 
+  // --- Global Context Store (v1.2) ---
+  let globalStore: ContextStore | null = null;
+  let globalSearchIndex: SearchIndex | null = null;
+
+  if (config.enableGlobalContext) {
+    try {
+      const globalDir = resolveGlobalDir(config);
+      globalStore = ContextStore.forAbsolutePath(globalDir);
+      if (!globalStore.exists()) {
+        globalStore.scaffold();
+      }
+      globalSearchIndex = new SearchIndex(
+        globalStore.path,
+        globalStore,
+        embeddingProvider,
+        config.hybridAlpha
+      );
+      await globalSearchIndex.rebuild();
+    } catch (e) {
+      console.error("Warning: Could not initialize global context:", e);
+      globalStore = null;
+      globalSearchIndex = null;
+    }
+  }
+
+  // --- Scope Helpers ---
+  function resolveScope(category: string, explicitScope?: string): "repo" | "global" {
+    if (explicitScope === "repo" || explicitScope === "global") return explicitScope;
+    if (category === "preferences" && globalStore) return "global";
+    return "repo";
+  }
+
+  function getStore(scope: "repo" | "global"): ContextStore {
+    if (scope === "global" && globalStore) return globalStore;
+    return store;
+  }
+
+  function getIndex(scope: "repo" | "global"): SearchIndex | null {
+    if (scope === "global") return globalSearchIndex;
+    return searchIndex;
+  }
+
   const session = createSessionTracker();
 
   const server = new Server(
@@ -254,6 +298,11 @@ export async function startMcpServer(
                 description:
                   "Level of detail. 'compact' (default) returns one-line summaries (~50 tokens each). 'full' returns longer snippets.",
               },
+              scope: {
+                type: "string",
+                enum: ["repo", "global"],
+                description: "Optional: search only repo or only global context. Omit to search both.",
+              },
             },
             required: ["query"],
           },
@@ -297,6 +346,11 @@ export async function startMcpServer(
                 description:
                   "Filename of an existing entry in the same category that this replaces. The old entry will be auto-deleted.",
               },
+              scope: {
+                type: "string",
+                enum: ["repo", "global"],
+                description: "Where to store. Defaults: preferences\u2192global, everything else\u2192repo. Explicit override.",
+              },
             },
             required: ["category", "filename", "content"],
           },
@@ -323,6 +377,11 @@ export async function startMcpServer(
               filename: {
                 type: "string",
                 description: "The filename to delete (with or without .md extension).",
+              },
+              scope: {
+                type: "string",
+                enum: ["repo", "global"],
+                description: "Which layer to delete from. Defaults to repo, falls back to global if not found.",
               },
             },
             required: ["category", "filename"],
@@ -351,6 +410,11 @@ export async function startMcpServer(
                 type: "boolean",
                 description: "If true (default), returns one-line summaries. If false, includes file sizes.",
               },
+              scope: {
+                type: "string",
+                enum: ["repo", "global"],
+                description: "Optional: list only repo or only global context. Omit to list both.",
+              },
             },
           },
           annotations: {
@@ -375,6 +439,11 @@ export async function startMcpServer(
               filename: {
                 type: "string",
                 description: "The filename to read (with or without .md extension)",
+              },
+              scope: {
+                type: "string",
+                enum: ["repo", "global"],
+                description: "Which layer to read from. Defaults to repo, falls back to global if not found.",
               },
             },
             required: ["category", "filename"],
@@ -423,15 +492,26 @@ export async function startMcpServer(
 
     switch (name) {
       case "context_search": {
-        const { query, category, limit = 5, detail = "compact" } = args as {
+        const { query, category, limit = 5, detail = "compact", scope: explicitScope } = args as {
           query: string;
           category?: string;
           limit?: number;
           detail?: "compact" | "full";
+          scope?: "repo" | "global";
         };
 
         session.searchQueries.push(query);
         session.readCallCount++;
+
+        // Guard: empty query
+        if (!query || !query.trim()) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "Empty search query. Use context_list to browse all entries, or provide a search term.",
+            }],
+          };
+        }
 
         // Validate category if provided
         if (category && !VALID_CATEGORIES.includes(category)) {
@@ -444,7 +524,10 @@ export async function startMcpServer(
           };
         }
 
-        if (!store.exists()) {
+        const repoExists = store.exists();
+        const globalExists = globalStore?.exists();
+
+        if (!repoExists && !globalExists) {
           return {
             content: [{
               type: "text" as const,
@@ -453,7 +536,8 @@ export async function startMcpServer(
           };
         }
 
-        if (!searchIndex) {
+        // Lazy-init repo search index
+        if (repoExists && !searchIndex) {
           searchIndex = new SearchIndex(store.path, store);
           await searchIndex.rebuild();
         }
@@ -469,25 +553,78 @@ export async function startMcpServer(
           }
         }
 
-        let results = await searchIndex.search(query, effectiveCategory, limit);
+        // Search repo
+        type TaggedResult = { category: string; filename: string; title: string; snippet: string; score: number; relativePath: string; source: string };
+        let repoResults: TaggedResult[] = [];
+        if ((!explicitScope || explicitScope === "repo") && searchIndex) {
+          const raw = await searchIndex.search(query, effectiveCategory, limit);
+          repoResults = raw.map((r) => ({ ...r, source: "repo" }));
 
-        // If routing returned 0 results, retry without category filter
-        if (results.length === 0 && effectiveCategory && !category) {
-          results = await searchIndex.search(query, undefined, limit);
-          routingNote = "";
+          // If routing returned 0, retry without category filter
+          if (repoResults.length === 0 && effectiveCategory && !category) {
+            const retry = await searchIndex.search(query, undefined, limit);
+            repoResults = retry.map((r) => ({ ...r, source: "repo" }));
+            routingNote = "";
+          }
         }
 
+        // Search global
+        let globalResults: TaggedResult[] = [];
+        if ((!explicitScope || explicitScope === "global") && globalSearchIndex) {
+          const raw = await globalSearchIndex.search(query, effectiveCategory, limit);
+          globalResults = raw.map((r) => ({ ...r, source: "global" }));
+
+          if (globalResults.length === 0 && effectiveCategory && !category) {
+            const retry = await globalSearchIndex.search(query, undefined, limit);
+            globalResults = retry.map((r) => ({ ...r, source: "global" }));
+          }
+        }
+
+        // Merge: repo-first dedup by category/filename
+        const seen = new Set<string>();
+        const merged: TaggedResult[] = [];
+        for (const r of repoResults) {
+          const key = `${r.category}/${r.filename}`;
+          if (!seen.has(key)) { seen.add(key); merged.push(r); }
+        }
+        for (const r of globalResults) {
+          const key = `${r.category}/${r.filename}`;
+          if (!seen.has(key)) { seen.add(key); merged.push(r); }
+        }
+        merged.sort((a, b) => b.score - a.score);
+        const results = merged.slice(0, limit);
+
         if (results.length === 0) {
-          // Fallback to simple text search (use explicit category, not auto-routed)
-          const entries = store.listEntries(category);
+          // Fallback to simple text search across both stores
           const queryLower = query.toLowerCase();
-          const matched = entries
-            .filter(
-              (e) =>
+          const fallbackEntries: TaggedResult[] = [];
+
+          const searchStore = (s: ContextStore, source: string) => {
+            if (!s.exists()) return;
+            const entries = s.listEntries(category);
+            for (const e of entries) {
+              if (
                 e.content.toLowerCase().includes(queryLower) ||
-                e.title.toLowerCase().includes(queryLower)
-            )
-            .slice(0, limit);
+                e.title.toLowerCase().includes(queryLower) ||
+                e.category.toLowerCase().includes(queryLower) ||
+                e.filename.replace(/\.md$/, "").replace(/-/g, " ").toLowerCase().includes(queryLower)
+              ) {
+                fallbackEntries.push({ ...e, snippet: e.content, score: 0, source });
+              }
+            }
+          };
+
+          if (!explicitScope || explicitScope === "repo") searchStore(store, "repo");
+          if ((!explicitScope || explicitScope === "global") && globalStore) searchStore(globalStore, "global");
+
+          // Dedup and limit
+          const seenFallback = new Set<string>();
+          const matched = fallbackEntries.filter((e) => {
+            const key = `${e.category}/${e.filename}`;
+            if (seenFallback.has(key)) return false;
+            seenFallback.add(key);
+            return true;
+          }).slice(0, limit);
 
           if (matched.length === 0) {
             return {
@@ -498,30 +635,30 @@ export async function startMcpServer(
             };
           }
 
-          // Format fallback results respecting detail level
           let text: string;
+          const sourceTag = (s: string) => globalStore ? ` \u2014 ${s}` : "";
           if (detail === "compact") {
             text = routingNote + matched
-              .map((e) => `- **${e.title}** [${e.category}/${e.filename}] \u2014 ${e.content.slice(0, 150).replace(/\n/g, " ")}...`)
+              .map((e) => `- **${e.title}** [${e.category}/${e.filename}${sourceTag(e.source)}] \u2014 ${e.snippet.slice(0, 150).replace(/\n/g, " ")}...`)
               .join("\n");
           } else {
             text = routingNote + matched
-              .map((e) => `## ${e.category}/${e.filename}\n**${e.title}**\n\n${e.content.slice(0, 800)}\n`)
+              .map((e) => `## ${e.category}/${e.filename}${sourceTag(e.source)}\n**${e.title}**\n\n${e.snippet.slice(0, 800)}\n`)
               .join("\n---\n\n");
           }
-
           return { content: [{ type: "text" as const, text: text + getWriteNudge() }] };
         }
 
-        // Format search results based on detail level
+        // Format search results with source tags when global is active
+        const sourceTag = (s: string) => globalStore ? ` \u2014 ${s}` : "";
         let text: string;
         if (detail === "compact") {
           text = routingNote + results
-            .map((r) => `- **${r.title}** [${r.category}/${r.filename}] (score: ${r.score.toFixed(2)}) \u2014 ${r.snippet.slice(0, 150).replace(/\n/g, " ")}...`)
+            .map((r) => `- **${r.title}** [${r.category}/${r.filename}${sourceTag(r.source)}] (score: ${r.score.toFixed(2)}) \u2014 ${r.snippet.slice(0, 150).replace(/\n/g, " ")}...`)
             .join("\n");
         } else {
           text = routingNote + results
-            .map((r) => `## ${r.category}/${r.filename} (relevance: ${r.score.toFixed(2)})\n**${r.title}**\n\n${r.snippet}\n`)
+            .map((r) => `## ${r.category}/${r.filename}${sourceTag(r.source)} (relevance: ${r.score.toFixed(2)})\n**${r.title}**\n\n${r.snippet}\n`)
             .join("\n---\n\n");
         }
 
@@ -529,7 +666,7 @@ export async function startMcpServer(
       }
 
       case "context_write": {
-        const { category, filename, content, append = false, supersedes } = args as {
+        const { category, filename, content, append = false, supersedes, scope: explicitScope } = args as {
           category: string;
           filename: string;
           content: string;
@@ -551,32 +688,38 @@ export async function startMcpServer(
           };
         }
 
-        if (!store.exists()) {
-          store.scaffold();
+        // Resolve target scope
+        const targetScope = resolveScope(category, explicitScope);
+        const targetStore = getStore(targetScope);
+        const targetIndex = getIndex(targetScope);
+
+        if (!targetStore.exists()) {
+          targetStore.scaffold();
         }
 
         // Auto-purge: handle explicit supersedes
         let supersedesDeleted = false;
         if (supersedes) {
           const supersedeFname = supersedes.endsWith(".md") ? supersedes : supersedes + ".md";
-          supersedesDeleted = store.deleteEntry(category, supersedeFname);
-          if (supersedesDeleted && searchIndex) {
-            await searchIndex.removeEntry(category, supersedeFname);
+          supersedesDeleted = targetStore.deleteEntry(category, supersedeFname);
+          if (supersedesDeleted && targetIndex) {
+            await targetIndex.removeEntry(category, supersedeFname);
           }
         }
 
         // Auto-purge: detect potentially overlapping entries
         let supersededList: string[] = [];
-        if (!append && searchIndex) {
+        const searchTerms = filename.replace(/-/g, " ");
+        const meaningfulWords = searchTerms.split(/\s+/).filter((t: string) => t.length > 2);
+        if (!append && targetIndex && content.length >= 100 && meaningfulWords.length >= 2) {
           try {
-            const searchTerms = filename.replace(/-/g, " ");
-            const existing = await searchIndex.search(searchTerms, category, 3);
+            const existing = await targetIndex.search(searchTerms, category, 3);
             supersededList = existing
               .filter((r) =>
                 r.category === category &&
                 r.filename !== filename + ".md" &&
                 r.filename !== filename &&
-                r.score > 2.0
+                r.score > 5.0
               )
               .map((d) => `${d.category}/${d.filename} (score: ${d.score.toFixed(1)})`);
           } catch {
@@ -586,21 +729,22 @@ export async function startMcpServer(
 
         let relativePath: string;
         if (append) {
-          relativePath = store.appendEntry(category, filename, content);
+          relativePath = targetStore.appendEntry(category, filename, content);
         } else {
-          relativePath = store.writeEntry(category, filename, content);
+          relativePath = targetStore.writeEntry(category, filename, content);
         }
 
         // Incremental index update (not full rebuild)
-        if (searchIndex) {
-          const entries = store.listEntries(category);
+        if (targetIndex) {
+          const entries = targetStore.listEntries(category);
           const entry = entries.find((e) => e.relativePath === relativePath || e.filename === filename + ".md");
           if (entry) {
-            await searchIndex.indexEntry(entry);
+            await targetIndex.indexEntry(entry);
           }
         }
 
-        let responseText = `\u2713 Written to ${relativePath}${append ? " (appended)" : ""}.`;
+        const scopeTag = globalStore ? ` [${targetScope}]` : "";
+        let responseText = `\u2713 Written to ${relativePath}${scopeTag}${append ? " (appended)" : ""}.`;
 
         if (supersedes && supersedesDeleted) {
           responseText += `\n\u2713 Superseded and deleted: ${category}/${supersedes}`;
@@ -621,9 +765,10 @@ export async function startMcpServer(
       }
 
       case "context_delete": {
-        const { category, filename } = args as {
+        const { category, filename, scope: explicitScope } = args as {
           category: string;
           filename: string;
+          scope?: "repo" | "global";
         };
 
         session.entriesDeleted.push(`${category}/${filename}`);
@@ -639,7 +784,19 @@ export async function startMcpServer(
         }
 
         const fname = filename.endsWith(".md") ? filename : filename + ".md";
-        const deleted = store.deleteEntry(category, fname);
+
+        // Try explicit scope first, then fall back
+        let deleted = false;
+        let deleteScope: "repo" | "global" = "repo";
+
+        if (!explicitScope || explicitScope === "repo") {
+          deleted = store.deleteEntry(category, fname);
+          deleteScope = "repo";
+        }
+        if (!deleted && (!explicitScope || explicitScope === "global") && globalStore) {
+          deleted = globalStore.deleteEntry(category, fname);
+          deleteScope = "global";
+        }
 
         if (!deleted) {
           return {
@@ -650,21 +807,27 @@ export async function startMcpServer(
           };
         }
 
-        // Remove from search index
-        if (searchIndex) {
-          await searchIndex.removeEntry(category, fname);
+        // Remove from the correct search index
+        const deleteIndex = deleteScope === "global" ? globalSearchIndex : searchIndex;
+        if (deleteIndex) {
+          await deleteIndex.removeEntry(category, fname);
         }
 
+        const scopeTag = globalStore ? ` [${deleteScope}]` : "";
         return {
           content: [{
             type: "text" as const,
-            text: `\u2713 Deleted ${category}/${fname}. Stale knowledge removed.`,
+            text: `\u2713 Deleted ${category}/${fname}${scopeTag}. Stale knowledge removed.`,
           }],
         };
       }
 
       case "context_list": {
-        const { category, compact = true } = (args || {}) as { category?: string; compact?: boolean };
+        const { category, compact = true, scope: explicitScope } = (args || {}) as {
+          category?: string;
+          compact?: boolean;
+          scope?: "repo" | "global";
+        };
 
         session.readCallCount++;
 
@@ -678,7 +841,10 @@ export async function startMcpServer(
           };
         }
 
-        if (!store.exists()) {
+        const repoExists = store.exists();
+        const globalExists = globalStore?.exists();
+
+        if (!repoExists && !globalExists) {
           return {
             content: [{
               type: "text" as const,
@@ -687,9 +853,18 @@ export async function startMcpServer(
           };
         }
 
-        const entries = store.listEntries(category);
+        // Collect entries from both stores
+        type TaggedEntry = ContextEntry & { source: string };
+        const allEntries: TaggedEntry[] = [];
 
-        if (entries.length === 0) {
+        if ((!explicitScope || explicitScope === "repo") && repoExists) {
+          allEntries.push(...store.listEntries(category).map((e) => ({ ...e, source: "repo" })));
+        }
+        if ((!explicitScope || explicitScope === "global") && globalExists && globalStore) {
+          allEntries.push(...globalStore.listEntries(category).map((e) => ({ ...e, source: "global" })));
+        }
+
+        if (allEntries.length === 0) {
           return {
             content: [{
               type: "text" as const,
@@ -698,19 +873,20 @@ export async function startMcpServer(
           };
         }
 
-        const grouped: Record<string, typeof entries> = {};
-        for (const entry of entries) {
+        const grouped: Record<string, TaggedEntry[]> = {};
+        for (const entry of allEntries) {
           if (!grouped[entry.category]) grouped[entry.category] = [];
           grouped[entry.category].push(entry);
         }
 
         let text = "";
+        const sourceTag = (s: string) => globalStore ? ` [${s}]` : "";
         if (compact) {
           for (const [cat, catEntries] of Object.entries(grouped)) {
             text += `**${cat}/** (${catEntries.length})\n`;
             for (const entry of catEntries) {
               const age = getRelativeTime(entry.lastModified);
-              text += `- ${entry.filename} \u2014 ${entry.title} (${age})\n`;
+              text += `- ${entry.filename}${sourceTag(entry.source)} \u2014 ${entry.title} (${age})\n`;
             }
           }
         } else {
@@ -720,7 +896,7 @@ export async function startMcpServer(
             for (const entry of catEntries) {
               const sizeKb = (entry.sizeBytes / 1024).toFixed(1);
               const age = getRelativeTime(entry.lastModified);
-              text += `- **${entry.filename}** \u2014 ${entry.title} (${sizeKb}KB, ${age})\n`;
+              text += `- **${entry.filename}**${sourceTag(entry.source)} \u2014 ${entry.title} (${sizeKb}KB, ${age})\n`;
             }
             text += "\n";
           }
@@ -730,9 +906,10 @@ export async function startMcpServer(
       }
 
       case "context_read": {
-        const { category, filename } = args as {
+        const { category, filename, scope: explicitScope } = args as {
           category: string;
           filename: string;
+          scope?: "repo" | "global";
         };
 
         if (category && !VALID_CATEGORIES.includes(category)) {
@@ -749,7 +926,18 @@ export async function startMcpServer(
         session.readCallCount++;
 
         const fname = filename.endsWith(".md") ? filename : filename + ".md";
-        const content = store.readEntry(category, fname);
+
+        // Try repo first, fall back to global
+        let content: string | null = null;
+        let readScope = "repo";
+
+        if (!explicitScope || explicitScope === "repo") {
+          content = store.readEntry(category, fname);
+        }
+        if (!content && (!explicitScope || explicitScope === "global") && globalStore) {
+          content = globalStore.readEntry(category, fname);
+          readScope = "global";
+        }
 
         if (!content) {
           return {
@@ -760,82 +948,107 @@ export async function startMcpServer(
           };
         }
 
+        const scopeTag = globalStore ? ` [${readScope}]` : "";
         return {
           content: [{
             type: "text" as const,
-            text: `# ${category}/${fname}\n\n${content}`,
+            text: `# ${category}/${fname}${scopeTag}\n\n${content}`,
           }],
         };
       }
 
       case "context_auto_orient": {
-        if (!store.exists()) {
+        const repoExists = store.exists();
+        const globalExists = globalStore?.exists();
+
+        if (!repoExists && !globalExists) {
           return {
             content: [{
               type: "text" as const,
-              text: "No .context/ directory found. The user needs to run:\n\n  npx repomemory go\n\nThis will set up persistent memory for this project.",
+              text: "No context found. The user needs to run:\n\n  npx repomemory go\n\nThis will set up persistent memory for this project.",
             }],
           };
         }
 
         const parts: string[] = [];
 
-        // 1. Index.md content
-        const indexContent = store.readIndex();
-        if (indexContent && indexContent.trim().length > 0) {
-          parts.push("# Project Overview\n\n" + indexContent);
+        // 1. Index.md content (repo only)
+        if (repoExists) {
+          const indexContent = store.readIndex();
+          if (indexContent && indexContent.trim().length > 0) {
+            parts.push("# Project Overview\n\n" + indexContent);
+          } else {
+            parts.push("# Project Overview\n\n*No index.md found. Run `npx repomemory analyze` to generate.*");
+          }
         } else {
-          parts.push("# Project Overview\n\n*No index.md found. Run `npx repomemory analyze` to generate.*");
+          parts.push("# Project Overview\n\n*No .context/ found. Run `npx repomemory go` to set up.*");
         }
 
-        // 2. Developer preferences
-        const prefEntries = store.listEntries("preferences");
-        if (prefEntries.length > 0) {
+        // 2. Developer preferences (repo overrides + global)
+        const repoPrefEntries = repoExists ? store.listEntries("preferences") : [];
+        const globalPrefEntries = globalExists && globalStore ? globalStore.listEntries("preferences") : [];
+
+        if (repoPrefEntries.length > 0 || globalPrefEntries.length > 0) {
           parts.push("\n# Developer Preferences\n");
-          for (const p of prefEntries) {
-            parts.push(`**${p.title}**\n${p.content.slice(0, 300)}\n`);
+
+          // Repo-level overrides first
+          const seen = new Set<string>();
+          for (const p of repoPrefEntries) {
+            seen.add(p.filename);
+            const tag = globalStore ? " [repo override]" : "";
+            parts.push(`**${p.title}**${tag}\n${p.content.slice(0, 300)}\n`);
+          }
+          // Global preferences (skip if shadowed by repo)
+          for (const p of globalPrefEntries) {
+            if (!seen.has(p.filename)) {
+              parts.push(`**${p.title}** [global]\n${p.content.slice(0, 300)}\n`);
+            }
           }
         }
 
-        // 3. Recent session summaries (last 3)
-        const sessionEntries = store.listEntries("sessions");
-        const recentSessions = sessionEntries
-          .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime())
-          .slice(0, 3);
+        // 3. Recent session summaries (last 3, repo only)
+        if (repoExists) {
+          const sessionEntries = store.listEntries("sessions");
+          const recentSessions = sessionEntries
+            .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime())
+            .slice(0, 3);
 
-        if (recentSessions.length > 0) {
-          parts.push("\n# Recent Sessions\n");
-          for (const s of recentSessions) {
-            const age = getRelativeTime(s.lastModified);
-            parts.push(`- **${s.title}** (${age}) \u2014 ${s.content.slice(0, 200).replace(/\n/g, " ")}...`);
+          if (recentSessions.length > 0) {
+            parts.push("\n# Recent Sessions\n");
+            for (const s of recentSessions) {
+              const age = getRelativeTime(s.lastModified);
+              parts.push(`- **${s.title}** (${age}) \u2014 ${s.content.slice(0, 200).replace(/\n/g, " ")}...`);
+            }
           }
         }
 
         // 4. Recently modified entries (last 7 days, excluding sessions/changelog)
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const allEntries = store.listEntries();
-        const recentEntries = allEntries
-          .filter(
-            (e) =>
-              e.category !== "sessions" &&
-              e.category !== "changelog" &&
-              e.category !== "root" &&
-              e.lastModified.getTime() > sevenDaysAgo
-          )
-          .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime())
-          .slice(0, 10);
+        if (repoExists) {
+          const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const allEntries = store.listEntries();
+          const recentEntries = allEntries
+            .filter(
+              (e) =>
+                e.category !== "sessions" &&
+                e.category !== "changelog" &&
+                e.category !== "root" &&
+                e.lastModified.getTime() > sevenDaysAgo
+            )
+            .sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime())
+            .slice(0, 10);
 
-        if (recentEntries.length > 0) {
-          parts.push("\n# Recently Updated\n");
-          for (const e of recentEntries) {
-            parts.push(`- ${e.category}/${e.filename}: ${e.title} (${getRelativeTime(e.lastModified)})`);
+          if (recentEntries.length > 0) {
+            parts.push("\n# Recently Updated\n");
+            for (const e of recentEntries) {
+              parts.push(`- ${e.category}/${e.filename}: ${e.title} (${getRelativeTime(e.lastModified)})`);
+            }
           }
-        }
 
-        // 5. Empty state warning
-        const stats = store.getStats();
-        if (stats.totalFiles === 0 || (stats.categories["facts"] || 0) === 0) {
-          parts.push("\n> **Note**: Context is mostly empty. Ask the user to run `npx repomemory analyze` to populate with architecture knowledge.");
+          // 5. Empty state warning
+          const stats = store.getStats();
+          if (stats.totalFiles === 0 || (stats.categories["facts"] || 0) === 0) {
+            parts.push("\n> **Note**: Context is mostly empty. Ask the user to run `npx repomemory analyze` to populate with architecture knowledge.");
+          }
         }
 
         return { content: [{ type: "text" as const, text: parts.join("\n") }] };
@@ -924,6 +1137,10 @@ export async function startMcpServer(
     if (searchIndex) {
       searchIndex.close();
       searchIndex = null;
+    }
+    if (globalSearchIndex) {
+      globalSearchIndex.close();
+      globalSearchIndex = null;
     }
     process.exit(0);
   };

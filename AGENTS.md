@@ -4,18 +4,18 @@
 
 ## Project Overview
 
-**repomemory** is a CLI tool + MCP server that gives AI coding agents persistent memory for repositories. It creates a `.context/` directory with structured knowledge (facts, decisions, regressions, preferences, session logs) that agents can search, write to, and delete from. Features hybrid keyword + semantic search, auto-session capture, intelligent category routing, and auto-purge detection.
+**repomemory** is a CLI tool + MCP server that gives AI coding agents persistent memory for repositories. It creates a `.context/` directory with structured knowledge (facts, decisions, regressions, preferences, session logs) that agents can search, write to, and delete from. Features hybrid keyword + semantic search, auto-session capture, intelligent category routing, auto-purge detection, and global developer context (`~/.repomemory/global/`) that follows you across all repos.
 
 **Language:** TypeScript (ESM, strict mode)
 **Runtime:** Node.js 18+
 **Package manager:** npm
 **Build:** `npm run build` (runs tsc + shebang injection via `scripts/build.js`)
-**Test:** `npm test` (vitest, 141 tests)
+**Test:** `npm test` (vitest, 163 tests)
 
 ## Repository Structure
 
 ```
-src/index.ts                 -> CLI entry point (Commander.js, 10 commands)
+src/index.ts                 -> CLI entry point (Commander.js, 11 commands)
 src/commands/init.ts         -> Scaffolds .context/ directory, exports CLAUDE_MD_BLOCK
 src/commands/analyze.ts      -> AI-powered repo analysis (core feature)
 src/commands/sync.ts         -> Git history -> changelog sync with deduplication
@@ -25,18 +25,19 @@ src/commands/status.ts       -> Coverage bars, freshness indicators, suggestions
 src/commands/wizard.ts       -> Interactive guided setup (@clack/prompts)
 src/commands/dashboard.ts    -> Localhost web dashboard (port 3333) with edit, search, export
 src/commands/hook.ts         -> Git post-commit hook install/uninstall
-src/commands/go.ts           -> One-command setup: init + analyze + setup claude
-src/mcp/server.ts            -> MCP server with 6 tools + 2 prompts + session tracking
+src/commands/go.ts           -> One-command setup: global profile + init + analyze + setup claude
+src/commands/global.ts       -> Manage global developer context (list/read/write/delete/export/import)
+src/mcp/server.ts            -> MCP server with 6 tools + 2 prompts + dual store (repo + global) + session tracking
 src/lib/ai-provider.ts       -> Multi-provider AI abstraction (Anthropic/OpenAI/Gemini/Grok)
 src/lib/embeddings.ts        -> Embedding provider abstraction (OpenAI/Gemini) + cosine similarity
-src/lib/config.ts            -> Configuration loading with Zod validation
-src/lib/context-store.ts     -> CRUD + delete for .context/ files (6 categories)
+src/lib/config.ts            -> Configuration loading with Zod validation, global context config, resolveGlobalDir()
+src/lib/context-store.ts     -> CRUD + delete for .context/ files (6 categories), forAbsolutePath() for global store
 src/lib/search.ts            -> sql.js (Wasm) FTS5 + optional vector search, hybrid scoring, DB persistence
 src/lib/json-repair.ts       -> JSON extraction/repair from AI output
 src/lib/git.ts               -> Git info extraction (execFileSync, no shell injection)
 src/lib/repo-scanner.ts      -> Repository scanning with .gitignore support
 scripts/build.js             -> Build script (tsc + shebang injection)
-tests/                       -> vitest test suite (141 tests)
+tests/                       -> vitest test suite (163 tests)
 ```
 
 ## How to Build and Test
@@ -44,7 +45,7 @@ tests/                       -> vitest test suite (141 tests)
 ```bash
 npm install
 npm run build                 # Compiles to dist/ with shebang
-npm test                      # Run vitest suite (141 tests)
+npm test                      # Run vitest suite (163 tests)
 node dist/index.js --help     # Verify CLI works
 ```
 
@@ -81,6 +82,12 @@ npm run dev -- dashboard
 11. **Intelligent category routing** — `detectQueryCategory()` heuristically routes queries to the right category (e.g., "why X" -> decisions, "bug in X" -> regressions).
 
 12. **Auto-purge detection** — `context_write` checks for overlapping entries and warns. Optional `supersedes` parameter for auto-delete.
+
+13. **Global context layer (v1.2)** — Developer preferences at `~/.repomemory/global/`. `preferences/` category defaults to global scope, everything else to repo. Two separate search DBs merged at result level.
+
+14. **Scope routing** — `resolveScope()` in server.ts determines target store. preferences→global, everything else→repo. Optional explicit `scope` parameter on all tools.
+
+15. **NFKD unicode normalization** — Accented characters in filenames are transliterated (café→cafe) before ASCII stripping.
 
 ## Adding a New AI Provider
 
@@ -139,4 +146,6 @@ npm run dev -- dashboard
 - **Embedding provider abstraction** — All embedding calls go through `embeddings.ts`.
 - **Category validation** — All categories are validated in both CLI and MCP server.
 - **Hook independence** — MCP server must work standalone without Claude Code hooks. Hooks are optional bonus.
-- **Repo isolation** — Each repo has its own `.context/`. Zero leakage between repos.
+- **Repo isolation** — Each repo has its own `.context/`. Global context at `~/.repomemory/global/` is personal preferences only — no repo-specific data.
+- **Backwards compatibility** — `enableGlobalContext: false` must make v1.2 behave exactly like v1.1.
+- **Scope routing defaults** — Don't change without updating both `resolveScope()` in server.ts and CLAUDE.md.

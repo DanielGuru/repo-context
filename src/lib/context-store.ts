@@ -29,6 +29,17 @@ export class ContextStore {
     this.contextDir = join(repoRoot, config.contextDir);
   }
 
+  /**
+   * Create a ContextStore rooted at an absolute path.
+   * Used for the global context store at ~/.repomemory/global/.
+   */
+  static forAbsolutePath(absoluteDir: string): ContextStore {
+    const instance = Object.create(ContextStore.prototype) as ContextStore;
+    (instance as any).root = absoluteDir;
+    (instance as any).contextDir = absoluteDir;
+    return instance;
+  }
+
   get path(): string {
     return this.contextDir;
   }
@@ -75,6 +86,8 @@ export class ContextStore {
     }
     let sanitized = filename
       .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "") // strip combining diacritical marks (é→e, ü→u)
       .replace(/[^a-z0-9._-]/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");

@@ -11,6 +11,14 @@ import { wizardCommand } from "./commands/wizard.js";
 import { dashboardCommand } from "./commands/dashboard.js";
 import { hookCommand } from "./commands/hook.js";
 import { goCommand } from "./commands/go.js";
+import {
+  globalListCommand,
+  globalReadCommand,
+  globalWriteCommand,
+  globalDeleteCommand,
+  globalExportCommand,
+  globalImportCommand,
+} from "./commands/global.js";
 
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
@@ -105,6 +113,42 @@ program
   .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
   .option("--skip-analyze", "Skip the analysis step", false)
   .action(goCommand);
+
+const globalCmd = program
+  .command("global")
+  .description("Manage global developer context (~/.repomemory/global/)");
+
+globalCmd
+  .command("list")
+  .description("List all global context entries")
+  .option("-c, --category <category>", "Filter by category")
+  .action(globalListCommand);
+
+globalCmd
+  .command("read <entry>")
+  .description("Read a global context entry (e.g. preferences/coding-style)")
+  .action(globalReadCommand);
+
+globalCmd
+  .command("write <entry>")
+  .description("Write a global context entry (e.g. preferences/coding-style)")
+  .option("--content <content>", "Content to write")
+  .action(globalWriteCommand);
+
+globalCmd
+  .command("delete <entry>")
+  .description("Delete a global context entry")
+  .action(globalDeleteCommand);
+
+globalCmd
+  .command("export")
+  .description("Export all global context as JSON to stdout")
+  .action(globalExportCommand);
+
+globalCmd
+  .command("import")
+  .description("Import global context from JSON on stdin")
+  .action(globalImportCommand);
 
 // Global error handlers
 process.on("uncaughtException", (err) => {

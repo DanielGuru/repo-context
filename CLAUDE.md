@@ -1,8 +1,35 @@
 # repomemory — Agent Instructions
 
+## Repository Memory (repomemory)
+
+This repo uses [repomemory](https://github.com/DanielGuru/repomemory) for persistent AI memory.
+
+**IMPORTANT: Before starting ANY task, you MUST call `context_search` with relevant
+keywords. This is NOT optional. The knowledge base contains architecture docs,
+past decisions, and known regressions that WILL save you from mistakes.
+Do NOT skip this step even if the task seems simple.**
+
+**ALWAYS at the start of every task:**
+1. Call `context_search` with keywords related to your task
+2. If this is a new session, call `context_auto_orient` for a full project overview
+3. NEVER propose changes without first checking for past decisions
+
+**During your session:**
+- ALWAYS use `context_write` to record discoveries, decisions, and gotchas
+- ALWAYS use `context_delete` to remove stale or incorrect knowledge
+- Record coding preferences in `context_write(category="preferences", ...)`
+
+**Before modifying code:**
+- You MUST search for known regressions related to the component
+- You MUST check for past decisions before proposing alternatives
+
+**At end of session (REQUIRED):**
+- Write a session summary: `context_write(category="sessions", ...)`
+- Route discoveries to the right category (facts/, decisions/, preferences/)
+
 ## What This Is
 
-A CLI tool + MCP server that gives AI coding agents persistent, structured memory for repositories. Agents can search, write, and delete knowledge that persists across sessions. Features hybrid keyword + semantic search, auto-session capture, intelligent category routing, and auto-purge detection.
+A CLI tool + MCP server that gives AI coding agents persistent, structured memory for repositories. Agents can search, write, and delete knowledge that persists across sessions. Features hybrid keyword + semantic search, auto-session capture, intelligent category routing, auto-purge detection, and **global developer context** that follows you across all repos.
 
 **npm package:** `repomemory`
 **Repo:** https://github.com/DanielGuru/repomemory
@@ -11,7 +38,7 @@ A CLI tool + MCP server that gives AI coding agents persistent, structured memor
 
 ```
 src/
-├── index.ts                  # CLI entry point (Commander.js). 10 commands. Global error handlers.
+├── index.ts                  # CLI entry point (Commander.js). 11 commands. Global error handlers.
 ├── commands/
 │   ├── init.ts               # Scaffolds .context/ directory + .repomemory.json config.
 │   │                           Exports CLAUDE_MD_BLOCK with MUST/ALWAYS agent instructions.
@@ -26,9 +53,13 @@ src/
 │   ├── wizard.ts             # Interactive guided setup using @clack/prompts.
 │   ├── dashboard.ts          # Localhost web UI with edit, server-side search, export.
 │   ├── hook.ts               # Git post-commit hook install/uninstall.
-│   └── go.ts                 # One-command setup: init + analyze + setup claude.
+│   ├── go.ts                 # One-command setup: init + analyze + setup claude + global profile.
+│   └── global.ts             # Manage global developer context (~/.repomemory/global/).
+│                               list, read, write, delete, export, import subcommands.
 ├── mcp/
 │   └── server.ts             # MCP server. 6 tools + 2 prompts + resources.
+│                               Dual-store: repo (.context/) + global (~/.repomemory/global/).
+│                               Scope routing: preferences→global, everything else→repo.
 │                               Session tracking, auto-capture on shutdown,
 │                               intelligent category routing, auto-purge detection,
 │                               progressive disclosure (compact/full), write-nudge.
@@ -39,9 +70,11 @@ src/
     ├── embeddings.ts          # Embedding provider abstraction (OpenAI, Gemini).
     │                           cosineSimilarity(). createEmbeddingProvider() with auto-detect.
     ├── config.ts              # Loads .repomemory.json with Zod validation. Single source
-    │                           of DEFAULT_CONFIG truth. Embedding config fields.
+    │                           of DEFAULT_CONFIG truth. Embedding + global context config.
+    │                           resolveGlobalDir() for ~ expansion.
     ├── context-store.ts       # CRUD + delete for .context/ files. Category validation.
-    │                           Sanitized filenames. Freshness tracking in getStats().
+    │                           Sanitized filenames with NFKD unicode normalization.
+    │                           forAbsolutePath() factory for global store.
     ├── search.ts              # sql.js (Wasm) FTS5 + optional vector search.
     │                           Hybrid scoring (alpha * keyword + (1-alpha) * semantic).
     │                           DB persistence (loads from disk on restart).
@@ -67,6 +100,8 @@ src/
 - **Auto-purge detection** — `context_write` checks for overlapping entries and warns about potential supersedes. Optional `supersedes` parameter for auto-delete.
 - **Auto-session capture** — MCP server tracks all tool calls and auto-writes a session summary on graceful shutdown (SIGTERM/SIGINT).
 - **6 categories** — facts, decisions, regressions, sessions, changelog, preferences (new in v1.1).
+- **Global context layer (v1.2)** — Developer preferences at `~/.repomemory/global/`, auto-scaffolded on first run. `preferences/` category defaults to global scope, everything else defaults to repo. Two separate search DBs merged at result level. Optional `scope` parameter on all tools for explicit override.
+- **Scope routing** — `resolveScope(category, explicitScope?)` in server.ts. preferences→global, everything else→repo. Repo entries shadow global entries with same category/filename.
 - **Zod config validation** — .repomemory.json is validated on load. Bad types get a warning, not a crash.
 - **@clack/prompts for wizard** — Beautiful interactive CLI with spinner, select, multiselect, confirm.
 
@@ -97,7 +132,7 @@ node dist/index.js --help
 
 | Command | File | Description |
 |---------|------|-------------|
-| `go` | go.ts | One-command setup (init + analyze + setup) |
+| `go` | go.ts | One-command setup (global profile + init + analyze + setup) |
 | `wizard` | wizard.ts | Interactive guided setup |
 | `init` | init.ts | Scaffold .context/ |
 | `analyze` | analyze.ts | AI analysis (--dry-run, --merge) |
@@ -107,17 +142,18 @@ node dist/index.js --help
 | `status` | status.ts | Coverage + freshness |
 | `dashboard` | dashboard.ts | Web UI on localhost:3333 |
 | `hook <action>` | hook.ts | Git hook install/uninstall |
+| `global <action>` | global.ts | Manage global context (list/read/write/delete/export/import) |
 
 ## MCP Tools
 
 | Tool | Description |
 |------|-------------|
-| `context_search` | Hybrid FTS5 + vector search with intelligent category routing. Compact/full detail modes. |
-| `context_write` | Write/append entries with auto-purge detection and supersedes support. |
-| `context_delete` | Remove stale entries |
-| `context_list` | List entries with compact/full modes |
-| `context_read` | Read full content |
-| `context_auto_orient` | One-call project orientation: index + sessions + recent changes + preferences |
+| `context_search` | Hybrid FTS5 + vector search across repo + global. Intelligent category routing. Scope filter. |
+| `context_write` | Write/append with scope routing (preferences→global). Auto-purge detection. Supersedes. |
+| `context_delete` | Remove entries. Tries repo first, falls back to global. Scope parameter. |
+| `context_list` | List entries from both stores with [repo]/[global] provenance tags. |
+| `context_read` | Read full content. Repo-first, falls back to global. |
+| `context_auto_orient` | Project orientation: index + global preferences + repo preferences + sessions + recent. |
 
 ## Common Issues
 
@@ -164,3 +200,6 @@ The `release.yml` workflow handles build, test, and `npm publish` with provenanc
 - Don't add embedding logic outside `embeddings.ts` — it's the single abstraction for all providers
 - Don't break the 7-tool integration (not just Claude Code)
 - Don't make the MCP server depend on Claude Code hooks — it must work standalone with any MCP client
+- Don't change scope routing defaults without updating both `resolveScope()` in server.ts AND the design doc
+- Don't store repo-specific data in `~/.repomemory/global/` — it's personal developer preferences only
+- Don't remove backwards compatibility — `enableGlobalContext: false` must make v1.2 behave like v1.1

@@ -198,6 +198,20 @@ describe("ContextStore", () => {
       expect(entries[0].filename).not.toBe(entries[1].filename);
       expect(entries[0].filename.length).toBeGreaterThan(3);
     });
+
+    it("transliterates accented characters in filenames", () => {
+      store.writeEntry("facts", "caf\u00e9-r\u00e9sum\u00e9", "content");
+      const entries = store.listEntries("facts");
+      expect(entries.length).toBe(1);
+      expect(entries[0].filename).toBe("cafe-resume.md");
+    });
+
+    it("preserves transliterable unicode instead of stripping", () => {
+      store.writeEntry("facts", "\u00fcber-na\u00efve-fa\u00e7ade", "content");
+      const entries = store.listEntries("facts");
+      expect(entries.length).toBe(1);
+      expect(entries[0].filename).toBe("uber-naive-facade.md");
+    });
   });
 
   describe("readEntry", () => {

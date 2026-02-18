@@ -1,0 +1,11 @@
+{
+  "provider": "anthropic",
+  "model": "claude-sonnet-4-6",
+  "contextDir": ".context",
+  "maxFilesForAnalysis": 80,
+  "maxGitCommits": 100,
+  "autoIndex": true,
+  "ignorePatterns": [],
+  "keyFilePatterns": [],
+  "embeddingProvider": "openai"
+}

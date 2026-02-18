@@ -440,8 +440,8 @@ export class SearchIndex {
 
     for (const term of terms) {
       const pattern = `%${term}%`;
-      scoreParts.push(`(CASE WHEN LOWER(title) LIKE ? THEN 3 ELSE 0 END + CASE WHEN LOWER(content) LIKE ? THEN 1 ELSE 0 END)`);
-      params.push(pattern, pattern);
+      scoreParts.push(`(CASE WHEN LOWER(title) LIKE ? THEN 3 ELSE 0 END + CASE WHEN LOWER(category) LIKE ? THEN 2 ELSE 0 END + CASE WHEN LOWER(content) LIKE ? THEN 1 ELSE 0 END)`);
+      params.push(pattern, pattern, pattern);
     }
 
     let sql = `
@@ -528,12 +528,14 @@ export class SearchIndex {
     limit: number
   ): SearchResult[] {
     // Normalize scores to [0, 1] using min-max normalization (handles negative FTS5 scores)
-    const minKeyword = Math.min(...keywordResults.map((r) => r.score), 0);
-    const maxKeyword = Math.max(...keywordResults.map((r) => r.score), 0);
+    const keywordScores = keywordResults.map((r) => r.score);
+    const minKeyword = keywordScores.length > 0 ? Math.min(...keywordScores) : 0;
+    const maxKeyword = keywordScores.length > 0 ? Math.max(...keywordScores) : 0;
     const keywordRange = maxKeyword - minKeyword || 0.001;
 
-    const minSemantic = Math.min(...semanticResults.map((r) => r.score), 0);
-    const maxSemantic = Math.max(...semanticResults.map((r) => r.score), 0);
+    const semanticScores = semanticResults.map((r) => r.score);
+    const minSemantic = semanticScores.length > 0 ? Math.min(...semanticScores) : 0;
+    const maxSemantic = semanticScores.length > 0 ? Math.max(...semanticScores) : 0;
     const semanticRange = maxSemantic - minSemantic || 0.001;
 
     const scoreMap = new Map<
