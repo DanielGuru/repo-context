@@ -40,6 +40,7 @@ export class SearchIndex {
   private dbPath: string;
   private store: ContextStore;
   private initialized = false;
+  private hasFts5 = false;
 
   constructor(contextDir: string, store: ContextStore) {
     this.dbPath = join(contextDir, ".search.db");
@@ -50,17 +51,7 @@ export class SearchIndex {
     if (this.db) return this.db;
 
     const SQL = await getSqlJs();
-
-    if (existsSync(this.dbPath)) {
-      try {
-        const buffer = readFileSync(this.dbPath);
-        this.db = new SQL.Database(buffer);
-      } catch {
-        this.db = new SQL.Database();
-      }
-    } else {
-      this.db = new SQL.Database();
-    }
+    this.db = new SQL.Database();
 
     if (!this.initialized) {
       this.initSchema();
@@ -73,6 +64,7 @@ export class SearchIndex {
   private initSchema(): void {
     if (!this.db) return;
 
+    // Core documents table — always created
     this.db.run(`
       CREATE TABLE IF NOT EXISTS documents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,39 +78,49 @@ export class SearchIndex {
       )
     `);
 
-    this.db.run(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
-        title,
-        content,
-        category,
-        content=documents,
-        content_rowid=id,
-        tokenize='porter unicode61'
-      )
-    `);
+    this.db.run(`CREATE INDEX IF NOT EXISTS idx_docs_category ON documents(category)`);
 
-    this.db.run(`
-      CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
-        INSERT INTO documents_fts(rowid, title, content, category)
-        VALUES (new.id, new.title, new.content, new.category);
-      END
-    `);
+    // Try FTS5 — it's fast for large repos but not always available in sql.js
+    try {
+      this.db.run(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
+          title,
+          content,
+          category,
+          content=documents,
+          content_rowid=id,
+          tokenize='porter unicode61'
+        )
+      `);
 
-    this.db.run(`
-      CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
-        INSERT INTO documents_fts(documents_fts, rowid, title, content, category)
-        VALUES ('delete', old.id, old.title, old.content, old.category);
-      END
-    `);
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
+          INSERT INTO documents_fts(rowid, title, content, category)
+          VALUES (new.id, new.title, new.content, new.category);
+        END
+      `);
 
-    this.db.run(`
-      CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
-        INSERT INTO documents_fts(documents_fts, rowid, title, content, category)
-        VALUES ('delete', old.id, old.title, old.content, old.category);
-        INSERT INTO documents_fts(rowid, title, content, category)
-        VALUES (new.id, new.title, new.content, new.category);
-      END
-    `);
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
+          INSERT INTO documents_fts(documents_fts, rowid, title, content, category)
+          VALUES ('delete', old.id, old.title, old.content, old.category);
+        END
+      `);
+
+      this.db.run(`
+        CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
+          INSERT INTO documents_fts(documents_fts, rowid, title, content, category)
+          VALUES ('delete', old.id, old.title, old.content, old.category);
+          INSERT INTO documents_fts(rowid, title, content, category)
+          VALUES (new.id, new.title, new.content, new.category);
+        END
+      `);
+
+      this.hasFts5 = true;
+    } catch {
+      // FTS5 not available in this sql.js build — fall back to LIKE queries
+      this.hasFts5 = false;
+    }
   }
 
   async rebuild(): Promise<void> {
@@ -148,7 +150,6 @@ export class SearchIndex {
   async indexEntry(entry: ContextEntry): Promise<void> {
     const db = await this.ensureDb();
 
-    // Upsert: delete then insert to trigger FTS sync
     db.run(
       "DELETE FROM documents WHERE category = ? AND filename = ?",
       [entry.category, entry.filename]
@@ -180,9 +181,16 @@ export class SearchIndex {
   }
 
   async search(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
+    if (this.hasFts5) {
+      return this.searchFts5(query, category, limit);
+    }
+    return this.searchLike(query, category, limit);
+  }
+
+  /** Fast FTS5 search — used when the sql.js build supports it */
+  private async searchFts5(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
     const db = await this.ensureDb();
 
-    // Build FTS5 query: use AND semantics (implicit AND in FTS5)
     const terms = query
       .replace(/['"]/g, "")
       .split(/\s+/)
@@ -193,13 +201,8 @@ export class SearchIndex {
     if (!terms) return [];
 
     let sql = `
-      SELECT
-        d.category,
-        d.filename,
-        d.title,
-        d.content,
-        d.relative_path,
-        rank * -1 as score
+      SELECT d.category, d.filename, d.title, d.content, d.relative_path,
+             rank * -1 as score
       FROM documents_fts
       JOIN documents d ON d.id = documents_fts.rowid
       WHERE documents_fts MATCH ?
@@ -218,7 +221,7 @@ export class SearchIndex {
     try {
       const results = db.exec(sql, params);
       if (!results.length || !results[0].values.length) {
-        // Fallback: try OR semantics if AND returned nothing
+        // Fall back to OR semantics
         const orTerms = query
           .replace(/['"]/g, "")
           .split(/\s+/)
@@ -235,7 +238,48 @@ export class SearchIndex {
         }
         return [];
       }
+      return this.mapResults(results[0], query);
+    } catch {
+      // FTS query failed — fall back to LIKE
+      return this.searchLike(query, category, limit);
+    }
+  }
 
+  /** Fallback LIKE search — works everywhere, fine for <500 docs */
+  private async searchLike(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
+    const db = await this.ensureDb();
+
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+
+    // Build scored query: title match = 3 points, content match = 1 point per term
+    const scoreParts: string[] = [];
+    const params: unknown[] = [];
+
+    for (const term of terms) {
+      const pattern = `%${term}%`;
+      scoreParts.push(`(CASE WHEN LOWER(title) LIKE ? THEN 3 ELSE 0 END + CASE WHEN LOWER(content) LIKE ? THEN 1 ELSE 0 END)`);
+      params.push(pattern, pattern);
+    }
+
+    let sql = `
+      SELECT category, filename, title, content, relative_path,
+             (${scoreParts.join(" + ")}) as score
+      FROM documents
+      WHERE score > 0
+    `;
+
+    if (category) {
+      sql += " AND category = ?";
+      params.push(category);
+    }
+
+    sql += " ORDER BY score DESC LIMIT ?";
+    params.push(limit);
+
+    try {
+      const results = db.exec(sql, params);
+      if (!results.length || !results[0].values.length) return [];
       return this.mapResults(results[0], query);
     } catch {
       return [];

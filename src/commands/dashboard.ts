@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { createServer } from "http";
+import { exec } from "child_process";
 import { loadConfig } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
 
@@ -61,7 +62,6 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
     console.log(chalk.dim(`\n  Press Ctrl+C to stop.\n`));
 
     // Try to open browser
-    const { exec } = require("child_process");
     const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
     exec(`${cmd} ${url}`, () => {}); // Silently fail if can't open
   });

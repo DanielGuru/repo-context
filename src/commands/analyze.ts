@@ -87,8 +87,8 @@ export async function analyzeCommand(options: {
   if (options.provider) config.provider = options.provider as Provider;
   if (options.model) config.model = options.model;
 
-  // Validate API key before doing any expensive work
-  const hasKey = await validateApiKey(config);
+  // Validate API key before doing any expensive work (skip for dry-run)
+  const hasKey = options.dryRun || await validateApiKey(config);
   if (!hasKey) {
     const envVar = {
       anthropic: "ANTHROPIC_API_KEY",
