@@ -1,9 +1,30 @@
-import { existsSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 import { loadConfig, DEFAULT_CONFIG } from "../lib/config.js";
 import type { Provider } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
+
+const CLAUDE_MD_BLOCK = `
+## Repository Memory (repomemory)
+
+This repo uses [repomemory](https://github.com/DanielGuru/repomemory) for persistent AI memory.
+
+**At the start of every task:**
+1. Use \`context_search\` to find relevant architecture, decisions, and known issues
+2. Read \`.context/index.md\` for quick project orientation
+
+**During your session:**
+- Use \`context_write\` to record discoveries, decisions, and gotchas
+- Use \`context_delete\` to remove stale or incorrect knowledge
+
+**Before modifying code:**
+- Search \`context_search("component name")\` for known regressions
+- Check \`context_search("why")\` for past decisions before proposing alternatives
+
+**At end of session:**
+- Write a brief session summary: \`context_write(category="sessions", ...)\`
+`;
 
 export async function initCommand(options: { dir?: string; provider?: string }) {
   const repoRoot = options.dir || process.cwd();
@@ -58,6 +79,19 @@ Write new learnings using the \`context_write\` MCP tool during your session.
       keyFilePatterns: [] as string[],
     };
     writeFileSync(configPath, JSON.stringify(configToWrite, null, 2) + "\n");
+  }
+
+  // Add agent instructions to CLAUDE.md
+  const claudeMdPath = join(repoRoot, "CLAUDE.md");
+  if (existsSync(claudeMdPath)) {
+    const existing = readFileSync(claudeMdPath, "utf-8");
+    if (!existing.includes("repomemory")) {
+      writeFileSync(claudeMdPath, existing + "\n" + CLAUDE_MD_BLOCK);
+      console.log(chalk.green("\u2713 Added repomemory instructions to existing CLAUDE.md"));
+    }
+  } else {
+    writeFileSync(claudeMdPath, `# Agent Instructions\n${CLAUDE_MD_BLOCK}`);
+    console.log(chalk.green("\u2713 Created CLAUDE.md with repomemory instructions"));
   }
 
   console.log(chalk.green("\u2713 Initialized .context/ directory"));
