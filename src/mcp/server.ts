@@ -10,6 +10,8 @@ import { ContextStore } from "../lib/context-store.js";
 import { SearchIndex } from "../lib/search.js";
 import type { RepoContextConfig } from "../lib/config.js";
 
+const VALID_CATEGORIES = ["facts", "decisions", "regressions", "sessions", "changelog"];
+
 export async function startMcpServer(
   repoRoot: string,
   config: RepoContextConfig
@@ -17,11 +19,10 @@ export async function startMcpServer(
   const store = new ContextStore(repoRoot, config);
   let searchIndex: SearchIndex | null = null;
 
-  // Initialize search index if .context exists
   if (store.exists()) {
     try {
       searchIndex = new SearchIndex(store.path, store);
-      searchIndex.rebuild();
+      await searchIndex.rebuild();
     } catch (e) {
       console.error("Warning: Could not initialize search index:", e);
     }
@@ -30,7 +31,7 @@ export async function startMcpServer(
   const server = new Server(
     {
       name: "repomemory",
-      version: "0.1.0",
+      version: "0.2.0",
     },
     {
       capabilities: {
@@ -48,7 +49,7 @@ export async function startMcpServer(
         {
           name: "context_search",
           description:
-            "Search the repository's persistent knowledge base. Returns relevant facts, decisions, regressions, and session notes. Use this at the start of a task to find relevant context, or when you need to understand why something is the way it is.",
+            "Search the repository's persistent knowledge base. Returns relevant facts, decisions, regressions, and session notes. Use this FIRST at the start of every task to find relevant context, or when you need to understand why something is the way it is. This prevents re-discovering architecture and re-debating past decisions.",
           inputSchema: {
             type: "object" as const,
             properties: {
@@ -59,7 +60,7 @@ export async function startMcpServer(
               },
               category: {
                 type: "string",
-                enum: ["facts", "decisions", "regressions", "sessions", "changelog"],
+                enum: VALID_CATEGORIES,
                 description:
                   "Optional: filter results to a specific category. Omit to search all.",
               },
@@ -80,7 +81,7 @@ export async function startMcpServer(
             properties: {
               category: {
                 type: "string",
-                enum: ["facts", "decisions", "regressions", "sessions", "changelog"],
+                enum: VALID_CATEGORIES,
                 description: `Category for the knowledge:
 - facts: Architecture, patterns, how things work
 - decisions: Why something was chosen (include alternatives considered)
@@ -108,15 +109,35 @@ export async function startMcpServer(
           },
         },
         {
-          name: "context_list",
+          name: "context_delete",
           description:
-            "List all knowledge entries in the repository context, optionally filtered by category. Returns filenames and titles for browsing.",
+            "Delete a knowledge entry from the repository context. Use this to remove stale or incorrect information. Knowledge quality matters more than quantity — prune aggressively.",
           inputSchema: {
             type: "object" as const,
             properties: {
               category: {
                 type: "string",
-                enum: ["facts", "decisions", "regressions", "sessions", "changelog"],
+                enum: VALID_CATEGORIES,
+                description: "The category of the entry to delete.",
+              },
+              filename: {
+                type: "string",
+                description: "The filename to delete (with or without .md extension).",
+              },
+            },
+            required: ["category", "filename"],
+          },
+        },
+        {
+          name: "context_list",
+          description:
+            "List all knowledge entries in the repository context, optionally filtered by category. Returns filenames, titles, and age for browsing. Use this to understand what knowledge already exists before writing new entries.",
+          inputSchema: {
+            type: "object" as const,
+            properties: {
+              category: {
+                type: "string",
+                enum: VALID_CATEGORIES,
                 description: "Optional: filter to a specific category.",
               },
             },
@@ -156,24 +177,32 @@ export async function startMcpServer(
           limit?: number;
         };
 
-        if (!store.exists()) {
+        // Validate category if provided
+        if (category && !VALID_CATEGORIES.includes(category)) {
           return {
-            content: [
-              {
-                type: "text" as const,
-                text: "No .context/ directory found. Run `repomemory init && repomemory analyze` to set up.",
-              },
-            ],
+            content: [{
+              type: "text" as const,
+              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+            }],
+            isError: true,
           };
         }
 
-        // Rebuild index if needed
-        if (!searchIndex) {
-          searchIndex = new SearchIndex(store.path, store);
-          searchIndex.rebuild();
+        if (!store.exists()) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "No .context/ directory found. Run `repomemory init && repomemory analyze` to set up.",
+            }],
+          };
         }
 
-        const results = searchIndex.search(query, category, limit);
+        if (!searchIndex) {
+          searchIndex = new SearchIndex(store.path, store);
+          await searchIndex.rebuild();
+        }
+
+        const results = await searchIndex.search(query, category, limit);
 
         if (results.length === 0) {
           // Fallback to simple text search
@@ -189,12 +218,10 @@ export async function startMcpServer(
 
           if (matched.length === 0) {
             return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: `No results found for "${query}"${category ? ` in ${category}` : ""}. Try a different query or browse with context_list.`,
-                },
-              ],
+              content: [{
+                type: "text" as const,
+                text: `No results found for "${query}"${category ? ` in ${category}` : ""}. Try a different query or browse with context_list.`,
+              }],
             };
           }
 
@@ -226,6 +253,17 @@ export async function startMcpServer(
           append?: boolean;
         };
 
+        // Validate category
+        if (!VALID_CATEGORIES.includes(category)) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+            }],
+            isError: true,
+          };
+        }
+
         if (!store.exists()) {
           store.scaffold();
         }
@@ -237,32 +275,83 @@ export async function startMcpServer(
           relativePath = store.writeEntry(category, filename, content);
         }
 
-        // Update search index
+        // Incremental index update (not full rebuild)
         if (searchIndex) {
-          searchIndex.rebuild();
+          const entries = store.listEntries(category);
+          const entry = entries.find((e) => e.relativePath === relativePath || e.filename === filename + ".md");
+          if (entry) {
+            await searchIndex.indexEntry(entry);
+          }
         }
 
         return {
-          content: [
-            {
+          content: [{
+            type: "text" as const,
+            text: `\u2713 Written to ${relativePath}${append ? " (appended)" : ""}. This knowledge will persist across sessions.`,
+          }],
+        };
+      }
+
+      case "context_delete": {
+        const { category, filename } = args as {
+          category: string;
+          filename: string;
+        };
+
+        if (!VALID_CATEGORIES.includes(category)) {
+          return {
+            content: [{
               type: "text" as const,
-              text: `✓ Written to ${relativePath}${append ? " (appended)" : ""}. This knowledge will persist across sessions.`,
-            },
-          ],
+              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+            }],
+            isError: true,
+          };
+        }
+
+        const fname = filename.endsWith(".md") ? filename : filename + ".md";
+        const deleted = store.deleteEntry(category, fname);
+
+        if (!deleted) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `File not found: ${category}/${fname}. Use context_list to see available files.`,
+            }],
+          };
+        }
+
+        // Remove from search index
+        if (searchIndex) {
+          await searchIndex.removeEntry(category, fname);
+        }
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: `\u2713 Deleted ${category}/${fname}. Stale knowledge removed.`,
+          }],
         };
       }
 
       case "context_list": {
         const { category } = (args || {}) as { category?: string };
 
+        if (category && !VALID_CATEGORIES.includes(category)) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+            }],
+            isError: true,
+          };
+        }
+
         if (!store.exists()) {
           return {
-            content: [
-              {
-                type: "text" as const,
-                text: "No .context/ directory found. Run `repomemory init` first.",
-              },
-            ],
+            content: [{
+              type: "text" as const,
+              text: "No .context/ directory found. Run `repomemory init` first.",
+            }],
           };
         }
 
@@ -270,12 +359,10 @@ export async function startMcpServer(
 
         if (entries.length === 0) {
           return {
-            content: [
-              {
-                type: "text" as const,
-                text: `No entries found${category ? ` in ${category}` : ""}. Run \`repomemory analyze\` to populate, or use context_write to add entries.`,
-              },
-            ],
+            content: [{
+              type: "text" as const,
+              text: `No entries found${category ? ` in ${category}` : ""}. Run \`repomemory analyze\` to populate, or use context_write to add entries.`,
+            }],
           };
         }
 
@@ -291,7 +378,7 @@ export async function startMcpServer(
           for (const entry of catEntries) {
             const sizeKb = (entry.sizeBytes / 1024).toFixed(1);
             const age = getRelativeTime(entry.lastModified);
-            text += `- **${entry.filename}** — ${entry.title} (${sizeKb}KB, ${age})\n`;
+            text += `- **${entry.filename}** \u2014 ${entry.title} (${sizeKb}KB, ${age})\n`;
           }
           text += "\n";
         }
@@ -310,39 +397,33 @@ export async function startMcpServer(
 
         if (!content) {
           return {
-            content: [
-              {
-                type: "text" as const,
-                text: `File not found: ${category}/${fname}. Use context_list to see available files.`,
-              },
-            ],
+            content: [{
+              type: "text" as const,
+              text: `File not found: ${category}/${fname}. Use context_list to see available files.`,
+            }],
           };
         }
 
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: `# ${category}/${fname}\n\n${content}`,
-            },
-          ],
+          content: [{
+            type: "text" as const,
+            text: `# ${category}/${fname}\n\n${content}`,
+          }],
         };
       }
 
       default:
         return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Unknown tool: ${name}`,
-            },
-          ],
+          content: [{
+            type: "text" as const,
+            text: `Unknown tool: ${name}`,
+          }],
           isError: true,
         };
     }
   });
 
-  // --- Resources (expose .context/ files as MCP resources) ---
+  // --- Resources ---
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => {
     if (!store.exists()) {
@@ -376,23 +457,32 @@ export async function startMcpServer(
     }
 
     return {
-      contents: [
-        {
-          uri,
-          mimeType: "text/markdown",
-          text: content,
-        },
-      ],
+      contents: [{
+        uri,
+        mimeType: "text/markdown",
+        text: content,
+      }],
     };
   });
 
-  // Connect via stdio
+  // Graceful shutdown
+  const cleanup = () => {
+    if (searchIndex) {
+      searchIndex.close();
+      searchIndex = null;
+    }
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", cleanup);
+  process.on("SIGINT", cleanup);
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
 
 function getRelativeTime(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (seconds < 60) return "just now";
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;

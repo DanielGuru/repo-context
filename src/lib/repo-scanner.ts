@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "fs";
+import { readdirSync, readFileSync, statSync, existsSync } from "fs";
 import { join, relative, extname, basename } from "path";
 import type { RepoContextConfig } from "./config.js";
 
@@ -42,6 +42,12 @@ const LANGUAGE_MAP: Record<string, string> = {
   ".c": "C",
   ".vue": "Vue",
   ".svelte": "Svelte",
+  ".zig": "Zig",
+  ".ex": "Elixir",
+  ".exs": "Elixir",
+  ".scala": "Scala",
+  ".dart": "Dart",
+  ".lua": "Lua",
 };
 
 const BINARY_EXTENSIONS = new Set([
@@ -55,15 +61,33 @@ const BINARY_EXTENSIONS = new Set([
   ".wasm",
 ]);
 
+function loadGitignorePatterns(repoRoot: string): string[] {
+  const gitignorePath = join(repoRoot, ".gitignore");
+  if (!existsSync(gitignorePath)) return [];
+
+  try {
+    return readFileSync(gitignorePath, "utf-8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+      .map((line) => line.replace(/\/$/, "")); // Remove trailing slash
+  } catch {
+    return [];
+  }
+}
+
 function shouldIgnore(name: string, ignorePatterns: string[]): boolean {
   return ignorePatterns.some((pattern) => {
-    if (pattern.includes("*")) {
+    // Strip leading /
+    const p = pattern.startsWith("/") ? pattern.slice(1) : pattern;
+
+    if (p.includes("*")) {
       const regex = new RegExp(
-        "^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$"
+        "^" + p.replace(/\./g, "\\.").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*").replace(/\?/g, ".") + "$"
       );
       return regex.test(name);
     }
-    return name === pattern;
+    return name === p;
   });
 }
 
@@ -78,7 +102,7 @@ function matchesKeyPattern(relativePath: string, patterns: string[]): boolean {
       const suffix = pattern.replace("**/", "");
       if (suffix.includes("*")) {
         const regex = new RegExp(
-          suffix.replace(/\*/g, ".*").replace(/\?/g, ".")
+          suffix.replace(/\./g, "\\.").replace(/\*/g, "[^/]*").replace(/\?/g, ".")
         );
         return regex.test(name);
       }
@@ -86,7 +110,7 @@ function matchesKeyPattern(relativePath: string, patterns: string[]): boolean {
     }
     if (pattern.includes("*")) {
       const regex = new RegExp(
-        "^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$"
+        "^" + pattern.replace(/\./g, "\\.").replace(/\*/g, "[^/]*").replace(/\?/g, ".") + "$"
       );
       return regex.test(name);
     }
@@ -103,8 +127,12 @@ export function scanRepo(
   const languages: Record<string, number> = {};
   let totalDirs = 0;
 
+  // Merge gitignore patterns with config patterns
+  const gitignorePatterns = loadGitignorePatterns(root);
+  const allIgnorePatterns = [...config.ignorePatterns, ...gitignorePatterns];
+
   function walk(dir: string, prefix: string, depth: number) {
-    if (depth > 6) return; // Don't go too deep
+    if (depth > 6) return;
 
     let entries: string[];
     try {
@@ -114,32 +142,32 @@ export function scanRepo(
     }
 
     const filtered = entries.filter(
-      (e) => !shouldIgnore(e, config.ignorePatterns) && !e.startsWith(".")
+      (e) => !shouldIgnore(e, allIgnorePatterns) && !e.startsWith(".")
     );
 
     filtered.forEach((entry, idx) => {
       const fullPath = join(dir, entry);
       const relPath = relative(root, fullPath);
       const isLast = idx === filtered.length - 1;
-      const connector = isLast ? "└── " : "├── ";
-      const childPrefix = isLast ? "    " : "│   ";
+      const connector = isLast ? "\u2514\u2500\u2500 " : "\u251c\u2500\u2500 ";
+      const childPrefix = isLast ? "    " : "\u2502   ";
 
       try {
         const stat = statSync(fullPath);
 
         if (stat.isDirectory()) {
           totalDirs++;
-          treeLines.push(`${prefix}${connector}${entry}/`);
+          if (depth <= 3) {
+            treeLines.push(`${prefix}${connector}${entry}/`);
+          }
           walk(fullPath, prefix + childPrefix, depth + 1);
         } else {
-          // Track file
           const ext = extname(entry).toLowerCase();
           if (LANGUAGE_MAP[ext]) {
             languages[LANGUAGE_MAP[ext]] =
               (languages[LANGUAGE_MAP[ext]] || 0) + 1;
           }
 
-          // Only add to tree at shallow depths
           if (depth <= 3) {
             treeLines.push(`${prefix}${connector}${entry}`);
           }
@@ -163,11 +191,16 @@ export function scanRepo(
   const packageManagers: string[] = [];
   const frameworks: string[] = [];
   const fileNames = new Set(allFiles.map((f) => basename(f.relativePath)));
+  const rootFiles = new Set(allFiles.filter((f) => !f.relativePath.includes("/")).map((f) => f.relativePath));
 
   if (fileNames.has("package-lock.json")) packageManagers.push("npm");
   if (fileNames.has("yarn.lock")) packageManagers.push("yarn");
   if (fileNames.has("pnpm-lock.yaml")) packageManagers.push("pnpm");
   if (fileNames.has("bun.lockb")) packageManagers.push("bun");
+  if (rootFiles.has("Cargo.toml")) packageManagers.push("cargo");
+  if (rootFiles.has("go.mod")) packageManagers.push("go modules");
+  if (rootFiles.has("Gemfile")) packageManagers.push("bundler");
+  if (rootFiles.has("requirements.txt") || rootFiles.has("pyproject.toml")) packageManagers.push("pip");
 
   // Read package.json for framework detection
   const pkgJsonPath = join(root, "package.json");
@@ -178,39 +211,70 @@ export function scanRepo(
       ...pkg.devDependencies,
     };
     if (allDeps["next"]) frameworks.push("Next.js");
-    if (allDeps["react"]) frameworks.push("React");
+    if (allDeps["react"] && !allDeps["next"]) frameworks.push("React");
     if (allDeps["vue"]) frameworks.push("Vue");
-    if (allDeps["svelte"]) frameworks.push("Svelte");
+    if (allDeps["nuxt"]) frameworks.push("Nuxt");
+    if (allDeps["svelte"] || allDeps["@sveltejs/kit"]) frameworks.push("Svelte");
     if (allDeps["express"]) frameworks.push("Express");
     if (allDeps["fastify"]) frameworks.push("Fastify");
     if (allDeps["hono"]) frameworks.push("Hono");
     if (allDeps["drizzle-orm"]) frameworks.push("Drizzle ORM");
     if (allDeps["prisma"] || allDeps["@prisma/client"]) frameworks.push("Prisma");
-    if (allDeps["django"]) frameworks.push("Django");
-    if (allDeps["flask"]) frameworks.push("Flask");
     if (allDeps["@cloudflare/workers-types"]) frameworks.push("Cloudflare Workers");
+    if (allDeps["astro"]) frameworks.push("Astro");
+    if (allDeps["remix"] || allDeps["@remix-run/node"]) frameworks.push("Remix");
+    if (allDeps["angular"] || allDeps["@angular/core"]) frameworks.push("Angular");
+    if (allDeps["tailwindcss"]) frameworks.push("Tailwind CSS");
   } catch {
     // No package.json or can't parse
   }
 
-  // Check for monorepo
+  // Detect from other ecosystem files
+  if (rootFiles.has("Cargo.toml")) {
+    try {
+      const cargo = readFileSync(join(root, "Cargo.toml"), "utf-8");
+      if (cargo.includes("actix")) frameworks.push("Actix");
+      if (cargo.includes("axum")) frameworks.push("Axum");
+      if (cargo.includes("tokio")) frameworks.push("Tokio");
+    } catch {}
+  }
+
+  if (rootFiles.has("go.mod")) {
+    try {
+      const gomod = readFileSync(join(root, "go.mod"), "utf-8");
+      if (gomod.includes("gin-gonic")) frameworks.push("Gin");
+      if (gomod.includes("fiber")) frameworks.push("Fiber");
+      if (gomod.includes("echo")) frameworks.push("Echo");
+    } catch {}
+  }
+
+  if (rootFiles.has("pyproject.toml") || rootFiles.has("requirements.txt")) {
+    try {
+      const pyfile = rootFiles.has("pyproject.toml")
+        ? readFileSync(join(root, "pyproject.toml"), "utf-8")
+        : readFileSync(join(root, "requirements.txt"), "utf-8");
+      if (pyfile.includes("django")) frameworks.push("Django");
+      if (pyfile.includes("flask")) frameworks.push("Flask");
+      if (pyfile.includes("fastapi")) frameworks.push("FastAPI");
+    } catch {}
+  }
+
+  // Check for monorepo — root package.json with workspaces field
   const hasWorkspaces =
     allFiles.some((f) => f.relativePath === "pnpm-workspace.yaml") ||
-    allFiles.some((f) => {
-      if (basename(f.relativePath) !== "package.json" || f.relativePath !== "package.json") return false;
+    (() => {
       try {
-        const pkg = JSON.parse(readFileSync(f.path, "utf-8"));
+        const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
         return pkg.workspaces != null;
       } catch {
         return false;
       }
-    });
+    })();
 
   // Read key files
   const keyFiles = allFiles
     .filter((f) => f.isKeyFile && !isBinaryFile(f.path) && f.size <= config.maxFileSize)
     .sort((a, b) => {
-      // Prioritize root-level files
       const aDepth = a.relativePath.split("/").length;
       const bDepth = b.relativePath.split("/").length;
       return aDepth - bDepth;

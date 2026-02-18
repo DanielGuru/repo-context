@@ -1,15 +1,21 @@
 {
   "name": "repomemory",
-  "version": "0.1.0",
-  "description": "Your repo remembers what every AI session learned. Persistent, structured memory for AI coding agents.",
+  "version": "0.2.0",
+  "description": "Your codebase never forgets. Persistent, structured memory for AI coding agents.",
   "type": "module",
   "bin": {
     "repomemory": "dist/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./mcp": "./dist/mcp/server.js"
   },
   "scripts": {
     "build": "node scripts/build.js",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "repository": {
@@ -29,32 +35,38 @@
     "claude-code",
     "cursor",
     "copilot",
+    "windsurf",
+    "cline",
+    "aider",
     "mcp",
-    "openclaw",
+    "mcp-server",
     "repository",
     "knowledge-base",
     "gemini",
     "grok",
-    "context-engineering"
+    "context-engineering",
+    "ai-memory",
+    "codebase-context"
   ],
   "author": "DanielGuru",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
+    "@clack/prompts": "^1.0.1",
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "better-sqlite3": "^12.6.2",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
-    "glob": "^13.0.5",
     "openai": "^6.22.0",
+    "ora": "^8.2.0",
+    "sql.js": "^1.12.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.2.3",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.1.0"
   },
   "engines": {
     "node": ">=18.0.0"

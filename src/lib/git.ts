@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export interface GitCommit {
   hash: string;
@@ -24,16 +24,21 @@ export interface GitInfo {
   commitFrequency: string;
 }
 
-function exec(cmd: string, cwd: string): string {
+function git(args: string[], cwd: string): string {
   try {
-    return execSync(cmd, { cwd, encoding: "utf-8", timeout: 30_000 }).trim();
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf-8",
+      timeout: 30_000,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
   } catch {
     return "";
   }
 }
 
 export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
-  const isGitRepo = exec("git rev-parse --is-inside-work-tree", repoRoot) === "true";
+  const isGitRepo = git(["rev-parse", "--is-inside-work-tree"], repoRoot) === "true";
 
   if (!isGitRepo) {
     return {
@@ -50,32 +55,34 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
     };
   }
 
-  const currentBranch = exec("git branch --show-current", repoRoot);
+  const currentBranch = git(["branch", "--show-current"], repoRoot);
 
   // Detect default branch
-  let defaultBranch = exec(
-    "git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'",
+  let defaultBranch = git(
+    ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"],
     repoRoot
-  );
+  ).replace(/^origin\//, "");
+
   if (!defaultBranch) {
-    const branches = exec("git branch -a", repoRoot);
+    const branches = git(["branch", "-a"], repoRoot);
     if (branches.includes("main")) defaultBranch = "main";
     else if (branches.includes("master")) defaultBranch = "master";
     else defaultBranch = currentBranch;
   }
 
-  const remoteUrl = exec("git remote get-url origin 2>/dev/null", repoRoot);
-  const totalCommitsStr = exec("git rev-list --count HEAD 2>/dev/null", repoRoot);
+  const remoteUrl = git(["remote", "get-url", "origin"], repoRoot);
+  const totalCommitsStr = git(["rev-list", "--count", "HEAD"], repoRoot);
   const totalCommits = parseInt(totalCommitsStr) || 0;
 
-  // Contributors
-  const contributorLines = exec(
-    "git shortlog -sn --no-merges HEAD 2>/dev/null | head -20",
+  // Contributors (limit to 20 in JS, not with head)
+  const contributorLines = git(
+    ["shortlog", "-sn", "--no-merges", "HEAD"],
     repoRoot
   );
   const contributors = contributorLines
     .split("\n")
     .filter(Boolean)
+    .slice(0, 20)
     .map((line) => {
       const match = line.trim().match(/^(\d+)\s+(.+)$/);
       return match
@@ -84,8 +91,14 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
     });
 
   // Recent commits with stats
-  const commitLog = exec(
-    `git log --format="%H|%h|%an|%ai|%s" --shortstat -n ${maxCommits} 2>/dev/null`,
+  const commitLog = git(
+    [
+      "log",
+      `--format=%H|%h|%an|%ai|%s`,
+      "--shortstat",
+      "-n",
+      String(maxCommits),
+    ],
     repoRoot
   );
 
@@ -109,7 +122,6 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
       insertions = 0,
       deletions = 0;
 
-    // Check next non-empty line for stats
     let j = i + 1;
     while (j < lines.length && lines[j] === "") j++;
     if (j < lines.length && lines[j].includes("file")) {
@@ -137,22 +149,22 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
     });
   }
 
-  // Active branches
-  const branchOutput = exec(
-    'git branch -a --sort=-committerdate --format="%(refname:short)" 2>/dev/null | head -15',
+  // Active branches (limit in JS)
+  const branchOutput = git(
+    ["branch", "-a", "--sort=-committerdate", "--format=%(refname:short)"],
     repoRoot
   );
-  const activeBranches = branchOutput.split("\n").filter(Boolean);
+  const activeBranches = branchOutput.split("\n").filter(Boolean).slice(0, 15);
 
   // Last tag
-  const lastTagOrRelease = exec("git describe --tags --abbrev=0 2>/dev/null", repoRoot);
+  const lastTagOrRelease = git(["describe", "--tags", "--abbrev=0"], repoRoot);
 
   // Commit frequency
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     .toISOString()
     .split("T")[0];
-  const recentCount = exec(
-    `git rev-list --count --after="${thirtyDaysAgo}" HEAD 2>/dev/null`,
+  const recentCount = git(
+    ["rev-list", "--count", `--after=${thirtyDaysAgo}`, "HEAD"],
     repoRoot
   );
   const commitsPerMonth = parseInt(recentCount) || 0;
@@ -177,15 +189,19 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
 }
 
 export function getGitDiffSummary(repoRoot: string, since: string): string {
-  return exec(
-    `git log --since="${since}" --format="%h %s (%an, %ar)" --no-merges 2>/dev/null`,
+  return git(
+    ["log", `--since=${since}`, "--format=%h %s (%an, %ar)", "--no-merges"],
     repoRoot
   );
 }
 
 export function getRecentDiffs(repoRoot: string, count: number): string {
-  return exec(
-    `git log -${count} --no-merges --format="--- %h: %s ---" --stat 2>/dev/null`,
+  return git(
+    ["log", `-${count}`, "--no-merges", "--format=--- %h: %s ---", "--stat"],
     repoRoot
   );
+}
+
+export function getLastCommitHash(repoRoot: string): string {
+  return git(["rev-parse", "HEAD"], repoRoot);
 }

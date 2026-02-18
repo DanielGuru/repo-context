@@ -5,8 +5,9 @@ import {
   writeFileSync,
   readdirSync,
   statSync,
+  unlinkSync,
 } from "fs";
-import { join, relative, basename, extname } from "path";
+import { join, relative, basename } from "path";
 import type { RepoContextConfig } from "./config.js";
 
 export interface ContextEntry {
@@ -50,10 +51,9 @@ export class ContextStore {
       mkdirSync(dir, { recursive: true });
     }
 
-    // Create .gitignore for search index
     const gitignorePath = join(this.contextDir, ".gitignore");
     if (!existsSync(gitignorePath)) {
-      writeFileSync(gitignorePath, ".search.db\n.search.db-*\n");
+      writeFileSync(gitignorePath, ".search.db\n.search.db-*\n.last-response.txt\n");
     }
   }
 
@@ -67,26 +67,36 @@ export class ContextStore {
     return readFileSync(indexPath, "utf-8");
   }
 
+  private sanitizeFilename(filename: string): string {
+    if (!filename.endsWith(".md")) {
+      filename = filename + ".md";
+    }
+    return filename
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+  }
+
+  private validateCategory(category: string): void {
+    const allowed = ["facts", "decisions", "regressions", "sessions", "changelog"];
+    if (!allowed.includes(category)) {
+      throw new Error(`Invalid category: ${category}. Allowed: ${allowed.join(", ")}`);
+    }
+  }
+
   writeEntry(
     category: string,
     filename: string,
     content: string
   ): string {
+    this.validateCategory(category);
+
     const dir = join(this.contextDir, category);
     mkdirSync(dir, { recursive: true });
 
-    // Ensure .md extension
-    if (!filename.endsWith(".md")) {
-      filename = filename + ".md";
-    }
-
-    // Sanitize filename
-    filename = filename
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]/g, "-")
-      .replace(/-+/g, "-");
-
-    const filePath = join(dir, filename);
+    const sanitized = this.sanitizeFilename(filename);
+    const filePath = join(dir, sanitized);
     writeFileSync(filePath, content);
 
     return relative(this.root, filePath);
@@ -97,14 +107,13 @@ export class ContextStore {
     filename: string,
     content: string
   ): string {
+    this.validateCategory(category);
+
     const dir = join(this.contextDir, category);
     mkdirSync(dir, { recursive: true });
 
-    if (!filename.endsWith(".md")) {
-      filename = filename + ".md";
-    }
-
-    const filePath = join(dir, filename);
+    const sanitized = this.sanitizeFilename(filename);
+    const filePath = join(dir, sanitized);
     let existing = "";
     if (existsSync(filePath)) {
       existing = readFileSync(filePath, "utf-8");
@@ -114,9 +123,24 @@ export class ContextStore {
     return relative(this.root, filePath);
   }
 
+  deleteEntry(category: string, filename: string): boolean {
+    const sanitized = this.sanitizeFilename(filename);
+    const filePath = join(this.contextDir, category, sanitized);
+    if (!existsSync(filePath)) return false;
+
+    unlinkSync(filePath);
+    return true;
+  }
+
   readEntry(category: string, filename: string): string | null {
     const filePath = join(this.contextDir, category, filename);
-    if (!existsSync(filePath)) return null;
+    if (!existsSync(filePath)) {
+      // Try sanitized version
+      const sanitized = this.sanitizeFilename(filename);
+      const altPath = join(this.contextDir, category, sanitized);
+      if (!existsSync(altPath)) return null;
+      return readFileSync(altPath, "utf-8");
+    }
     return readFileSync(filePath, "utf-8");
   }
 
@@ -145,7 +169,6 @@ export class ContextStore {
         const stat = statSync(filePath);
         const content = readFileSync(filePath, "utf-8");
 
-        // Extract title from first heading or filename
         const titleMatch = content.match(/^#\s+(.+)$/m);
         const title = titleMatch
           ? titleMatch[1]
@@ -196,18 +219,31 @@ export class ContextStore {
     totalFiles: number;
     totalSize: number;
     categories: Record<string, number>;
+    stalestFile?: { path: string; age: number };
+    newestFile?: { path: string; age: number };
   } {
     const entries = this.listEntries();
     const categories: Record<string, number> = {};
+    let stalest: ContextEntry | null = null;
+    let newest: ContextEntry | null = null;
 
     for (const entry of entries) {
       categories[entry.category] = (categories[entry.category] || 0) + 1;
+      if (!stalest || entry.lastModified < stalest.lastModified) stalest = entry;
+      if (!newest || entry.lastModified > newest.lastModified) newest = entry;
     }
 
+    const now = Date.now();
     return {
       totalFiles: entries.length,
       totalSize: entries.reduce((sum, e) => sum + e.sizeBytes, 0),
       categories,
+      stalestFile: stalest
+        ? { path: `${stalest.category}/${stalest.filename}`, age: now - stalest.lastModified.getTime() }
+        : undefined,
+      newestFile: newest
+        ? { path: `${newest.category}/${newest.filename}`, age: now - newest.lastModified.getTime() }
+        : undefined,
     };
   }
 }

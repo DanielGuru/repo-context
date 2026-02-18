@@ -1,14 +1,21 @@
+<div align="center">
+
 # repomemory
 
-**Your repo remembers what every AI session learned.**
+**Your codebase never forgets.**
 
-Persistent, structured memory for AI coding agents. Stop wasting the first 10 minutes of every session re-discovering your architecture.
+AI agents lose context every session. repomemory fixes that.
+One command analyzes your repo and creates a persistent knowledge base that any AI tool can search, read, and write to.
 
+[![npm version](https://img.shields.io/npm/v/repomemory.svg)](https://www.npmjs.com/package/repomemory)
+[![license](https://img.shields.io/npm/l/repomemory.svg)](https://github.com/DanielGuru/repomemory/blob/main/LICENSE)
+[![CI](https://github.com/DanielGuru/repomemory/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielGuru/repomemory/actions)
+
+```bash
+npx repomemory wizard
 ```
-npx repomemory init && npx repomemory analyze
-```
 
-That's it. Your repo now has a `.context/` directory with AI-generated knowledge that persists across sessions.
+</div>
 
 ---
 
@@ -21,11 +28,11 @@ Every time you open a project with Claude Code, Cursor, Copilot, or any AI codin
 - It proposes changes that were already debated and rejected
 - It re-introduces bugs that were already fixed
 
-Your CLAUDE.md / .cursorrules helps, but it's a static file you manually maintain. It gets stale. It loads everything whether relevant or not.
+Your CLAUDE.md / .cursorrules helps, but it's static and manually maintained. It gets stale.
 
 ## The Solution
 
-`repomemory` creates a structured knowledge base that AI agents can search, read, and **write to** during sessions:
+repomemory creates a structured, searchable knowledge base that AI agents can **search, read, and write to** during sessions:
 
 ```
 .context/
@@ -48,70 +55,58 @@ Your CLAUDE.md / .cursorrules helps, but it's a static file you manually maintai
 
 ## Quick Start
 
-### 1. Install and Initialize
+### Interactive Setup (Recommended)
 
 ```bash
+npx repomemory wizard
+```
+
+The wizard walks you through provider selection, tool integration, and first analysis — all in one beautiful flow.
+
+### Manual Setup
+
+```bash
+# 1. Initialize
 npx repomemory init
-```
 
-### 2. Set Your API Key
+# 2. Set your API key
+export ANTHROPIC_API_KEY=sk-ant-...    # or OPENAI_API_KEY, GEMINI_API_KEY, GROK_API_KEY
 
-```bash
-# Pick one:
-export ANTHROPIC_API_KEY=sk-ant-...    # Claude (recommended)
-export OPENAI_API_KEY=sk-...           # GPT-4o
-export GEMINI_API_KEY=...              # Gemini
-export GROK_API_KEY=...                # Grok
-```
-
-### 3. Analyze Your Repo
-
-```bash
+# 3. Analyze your repo (2-5 min, uses AI)
 npx repomemory analyze
+
+# 4. Connect to your AI tool
+npx repomemory setup claude     # Claude Code (MCP server auto-starts)
+npx repomemory setup cursor     # Cursor
+npx repomemory setup copilot    # GitHub Copilot
+npx repomemory setup windsurf   # Windsurf
+npx repomemory setup cline      # Cline
+npx repomemory setup aider      # Aider
+npx repomemory setup continue   # Continue
+
+# 5. Commit to git — your team shares the knowledge
+git add .context/ && git commit -m "Add repomemory knowledge base"
 ```
 
-This scans your entire codebase — file structure, key configs, database schemas, git history — and uses AI to generate structured knowledge files. Takes 2-5 minutes depending on repo size.
+## Features
 
-### 4. Connect to Your AI Tool
+### MCP Server — AI Agents With Memory
 
-```bash
-# Claude Code
-npx repomemory setup claude
-
-# Cursor
-npx repomemory setup cursor
-
-# GitHub Copilot
-npx repomemory setup copilot
-```
-
-### 5. Commit to Git
-
-```bash
-git add .context/
-git commit -m "Add repomemory knowledge base"
-```
-
-Your entire team now shares the knowledge.
-
-## MCP Server
-
-The real power is the MCP server, which gives AI agents tools to **search and write** context:
+The real power is the MCP server. It gives AI agents tools to search, read, write, and delete context:
 
 ```bash
 npx repomemory serve
 ```
 
-### Tools Exposed
-
 | Tool | What It Does |
 |------|-------------|
-| `context_search` | Search the knowledge base by natural language query |
-| `context_write` | Write new knowledge (facts, decisions, regressions, session notes) |
-| `context_list` | Browse all entries by category |
+| `context_search` | Full-text search across all knowledge |
+| `context_write` | Write new facts, decisions, regressions, session notes |
 | `context_read` | Read a specific context file |
+| `context_list` | Browse all entries by category |
+| `context_delete` | Remove stale or incorrect knowledge |
 
-When configured via `repomemory setup claude`, the MCP server auto-starts with Claude Code. Your agent can:
+When configured via `repomemory setup claude`, the MCP server auto-starts with Claude Code:
 
 ```
 Agent: "Let me search for context about the authentication flow..."
@@ -122,6 +117,91 @@ Agent: "I discovered a race condition in token refresh. Let me record this."
 → context_write(category="regressions", filename="token-refresh-race", content="...")
 → Persisted. Next session will find it.
 ```
+
+### Web Dashboard
+
+Browse and search your context files in a beautiful local web UI:
+
+```bash
+npx repomemory dashboard
+```
+
+Opens `http://localhost:3333` with category filtering, full-text search, and file previews.
+
+### Smart Analysis
+
+```bash
+# Full analysis
+npx repomemory analyze
+
+# Preview what would happen (no API call)
+npx repomemory analyze --dry-run
+
+# Update without overwriting your manual edits
+npx repomemory analyze --merge
+
+# Use a different provider or model
+npx repomemory analyze --provider openai --model gpt-4o
+```
+
+Features:
+- Cost estimation before running
+- API key validation before expensive calls
+- Retry with exponential backoff on failures
+- Coverage report showing facts/decisions/regressions
+- Merge mode that preserves manual edits
+
+### Git Sync
+
+```bash
+npx repomemory sync
+```
+
+Syncs recent git commits to `changelog/YYYY-MM.md` with smart deduplication.
+
+### Status & Coverage
+
+```bash
+npx repomemory status
+```
+
+Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
+
+## Supported Providers
+
+| Provider | Models | Env Variable |
+|----------|--------|-------------|
+| `anthropic` | claude-sonnet-4-5, claude-opus-4-6 | `ANTHROPIC_API_KEY` |
+| `openai` | gpt-4o, o3-mini | `OPENAI_API_KEY` |
+| `gemini` | gemini-2.0-flash, gemini-2.5-pro | `GEMINI_API_KEY` / `GOOGLE_API_KEY` |
+| `grok` | grok-3, grok-3-mini | `GROK_API_KEY` / `XAI_API_KEY` |
+
+## Supported AI Tools
+
+| Tool | Integration | Command |
+|------|------------|---------|
+| **Claude Code** | MCP server (auto-starts) | `repomemory setup claude` |
+| **Cursor** | .cursor/rules/ | `repomemory setup cursor` |
+| **GitHub Copilot** | copilot-instructions.md | `repomemory setup copilot` |
+| **Windsurf** | .windsurfrules | `repomemory setup windsurf` |
+| **Cline** | .clinerules | `repomemory setup cline` |
+| **Aider** | .aider.conf.yml | `repomemory setup aider` |
+| **Continue** | .continue/rules/ | `repomemory setup continue` |
+
+## All Commands
+
+| Command | Description |
+|---------|-------------|
+| `repomemory wizard` | Interactive guided setup (recommended for first use) |
+| `repomemory init` | Scaffold `.context/` directory |
+| `repomemory analyze` | AI-powered repo analysis |
+| `repomemory analyze --dry-run` | Preview analysis without API call |
+| `repomemory analyze --merge` | Update without overwriting edits |
+| `repomemory sync` | Sync git history to changelog |
+| `repomemory serve` | Start MCP server |
+| `repomemory setup <tool>` | Configure AI tool integration |
+| `repomemory status` | Show context coverage and freshness |
+| `repomemory dashboard` | Open web dashboard |
 
 ## Configuration
 
@@ -134,70 +214,32 @@ Create `.repomemory.json` in your repo root:
   "contextDir": ".context",
   "maxFilesForAnalysis": 80,
   "maxGitCommits": 100,
-  "autoIndex": true,
   "ignorePatterns": [],
   "keyFilePatterns": []
 }
 ```
 
-### Supported Providers
-
-| Provider | Models | Env Variable |
-|----------|--------|-------------|
-| `anthropic` | claude-sonnet-4-5-20250929, claude-opus-4-6 | `ANTHROPIC_API_KEY` |
-| `openai` | gpt-4o, o3-mini | `OPENAI_API_KEY` |
-| `gemini` | gemini-2.0-flash, gemini-2.5-pro | `GEMINI_API_KEY` |
-| `grok` | grok-3, grok-3-mini | `GROK_API_KEY` |
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `repomemory init` | Scaffold `.context/` directory |
-| `repomemory analyze` | AI-powered repo analysis (generates all context files) |
-| `repomemory sync` | Sync recent git history to `changelog/` |
-| `repomemory serve` | Start MCP server for AI agent integration |
-| `repomemory setup <tool>` | Configure Claude Code, Cursor, or Copilot |
-| `repomemory status` | Show current context state |
-
-### Options
-
-```bash
-# Use a specific provider
-repomemory analyze --provider openai --model gpt-4o
-
-# Analyze a different directory
-repomemory analyze --dir /path/to/repo
-
-# Verbose output
-repomemory analyze --verbose
-```
+Custom `ignorePatterns` and `keyFilePatterns` are **additive** — they extend the built-in defaults, not replace them.
 
 ## How It Works
 
-### Initial Analysis (`analyze`)
+### Initial Analysis
 
-1. **Scans** your repo structure — files, directories, languages, frameworks
-2. **Reads** key files — package.json, configs, schemas, READMEs, existing CLAUDE.md
-3. **Mines** git history — commits, contributors, change patterns, activity
-4. **Sends** everything to your chosen AI model with a structured analysis prompt
-5. **Writes** organized knowledge to `.context/` — facts, decisions, regressions
-6. **Indexes** all files for full-text search via the MCP server
+1. **Scans** your repo — files, directories, languages, frameworks
+2. **Reads** key files — package.json, configs, schemas, READMEs, CLAUDE.md
+3. **Mines** git history — commits, contributors, change patterns
+4. **Respects** .gitignore — won't scan ignored files
+5. **Sends** everything to your AI model with a structured analysis prompt
+6. **Writes** organized knowledge to `.context/`
+7. **Indexes** all files for FTS5 full-text search
 
 ### During Sessions (MCP Server)
 
 - Agent searches for relevant context at task start
 - Agent writes discoveries, decisions, and gotchas during work
+- Agent can delete stale or incorrect knowledge
 - Knowledge accumulates session over session
-- Next agent session has access to everything previous sessions learned
-
-### Git Sync (`sync`)
-
-```bash
-repomemory sync
-```
-
-Reads recent git commits and writes them to `changelog/YYYY-MM.md`. Run periodically or as a post-merge hook.
+- Next session starts with everything previous sessions learned
 
 ## Why Not Just Use CLAUDE.md?
 
@@ -205,18 +247,17 @@ Reads recent git commits and writes them to `changelog/YYYY-MM.md`. Run periodic
 |--|-----------|-------------|
 | **Maintenance** | Manual | AI-generated + agent-maintained |
 | **Search** | Load everything | FTS5 search, return only relevant |
-| **Cross-tool** | Claude Code only | Claude, Cursor, Copilot, any MCP client |
+| **Cross-tool** | Claude Code only | 7 AI tools supported |
 | **Team knowledge** | One person writes | Every AI session contributes |
-| **Decisions** | Mixed in with instructions | Structured, searchable, prevents re-debating |
-| **Regressions** | Not tracked | Explicit files preventing repeat bugs |
+| **Decisions** | Mixed in with instructions | Structured, searchable |
+| **Regressions** | Not tracked | Prevents repeat bugs |
+| **Freshness** | Unknown | Staleness detection + warnings |
 
-`repomemory` doesn't replace CLAUDE.md — it complements it. Your CLAUDE.md stays for instructions and rules. `.context/` holds the knowledge that grows over time.
+repomemory doesn't replace CLAUDE.md — it complements it. Your CLAUDE.md stays for instructions and rules. `.context/` holds the knowledge that grows over time.
 
-## Inspired By
+## Contributing
 
-- **[OpenClaw](https://github.com/openclaw/openclaw)** — The memory architecture (tiers, temporal decay, hybrid search) inspired this project. OpenClaw remembers *you*. repomemory remembers *your codebase*.
-- **[Aider](https://aider.chat/)** — Repo maps and convention files showed the value of structured context.
-- **Context Engineering** — The emerging discipline of curating what AI models see for better outcomes.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for development setup, testing, and contribution guidelines.
 
 ## License
 
@@ -224,4 +265,10 @@ MIT
 
 ---
 
+<div align="center">
+
 **Built for developers who are tired of AI agents forgetting everything between sessions.**
+
+[Report Bug](https://github.com/DanielGuru/repomemory/issues) · [Request Feature](https://github.com/DanielGuru/repomemory/issues) · [npm](https://www.npmjs.com/package/repomemory)
+
+</div>

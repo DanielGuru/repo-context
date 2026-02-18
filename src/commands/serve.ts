@@ -7,9 +7,10 @@ export async function serveCommand(options: { dir?: string }) {
   const config = loadConfig(repoRoot);
 
   // Only log to stderr so stdout is clean for MCP protocol
-  console.error(chalk.dim(`repomemory MCP server starting...`));
+  console.error(chalk.dim(`repomemory MCP server v0.2.0`));
   console.error(chalk.dim(`  Root: ${repoRoot}`));
   console.error(chalk.dim(`  Context: ${config.contextDir}/`));
+  console.error(chalk.dim(`  Tools: context_search, context_write, context_delete, context_list, context_read`));
 
   await startMcpServer(repoRoot, config);
 }
