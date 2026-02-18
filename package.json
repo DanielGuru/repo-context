@@ -7,10 +7,18 @@
     "repo-context": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.js",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DanielGuru/repo-context.git"
+  },
+  "homepage": "https://github.com/DanielGuru/repo-context#readme",
+  "bugs": {
+    "url": "https://github.com/DanielGuru/repo-context/issues"
   },
   "keywords": [
     "ai",
@@ -18,6 +26,7 @@
     "context",
     "coding-agent",
     "claude",
+    "claude-code",
     "cursor",
     "copilot",
     "mcp",
@@ -25,9 +34,10 @@
     "repository",
     "knowledge-base",
     "gemini",
-    "grok"
+    "grok",
+    "context-engineering"
   ],
-  "author": "",
+  "author": "DanielGuru",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
@@ -51,7 +61,6 @@
   },
   "files": [
     "dist",
-    "templates",
     "README.md",
     "LICENSE"
   ]

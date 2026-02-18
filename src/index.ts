@@ -108,4 +108,33 @@ program
     );
   });
 
+// Global error handler — no stack traces for users
+process.on("uncaughtException", (err) => {
+  const msg = err.message || String(err);
+
+  // Known error patterns → friendly messages
+  if (msg.includes("API key")) {
+    console.error(`\n✗ ${msg}`);
+    console.error("\n  Set your API key and try again:");
+    console.error("    export ANTHROPIC_API_KEY=sk-ant-...");
+    console.error("    export OPENAI_API_KEY=sk-...");
+    console.error("    export GEMINI_API_KEY=...");
+    console.error("    export GROK_API_KEY=...");
+  } else if (msg.includes("ENOENT")) {
+    console.error(`\n✗ File or directory not found: ${msg.split("'")[1] || "unknown"}`);
+  } else if (msg.includes("EACCES")) {
+    console.error(`\n✗ Permission denied. Try running with appropriate permissions.`);
+  } else if (msg.includes("fetch failed") || msg.includes("ECONNREFUSED")) {
+    console.error(`\n✗ Network error. Check your internet connection and try again.`);
+  } else if (msg.includes("401") || msg.includes("authentication")) {
+    console.error(`\n✗ Authentication failed. Check your API key is valid.`);
+  } else if (msg.includes("429") || msg.includes("rate limit")) {
+    console.error(`\n✗ Rate limited. Wait a moment and try again.`);
+  } else {
+    console.error(`\n✗ ${msg}`);
+  }
+
+  process.exit(1);
+});
+
 program.parse();
