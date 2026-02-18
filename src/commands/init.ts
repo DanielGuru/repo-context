@@ -1,12 +1,11 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import chalk from "chalk";
 import { loadConfig, DEFAULT_CONFIG } from "../lib/config.js";
 import type { Provider } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
 
-const CLAUDE_MD_BLOCK = `
-## Repository Memory (repomemory)
+export const CLAUDE_MD_BLOCK = `## Repository Memory (repomemory)
 
 This repo uses [repomemory](https://github.com/DanielGuru/repomemory) for persistent AI memory.
 
@@ -23,8 +22,7 @@ This repo uses [repomemory](https://github.com/DanielGuru/repomemory) for persis
 - Check \`context_search("why")\` for past decisions before proposing alternatives
 
 **At end of session:**
-- Write a brief session summary: \`context_write(category="sessions", ...)\`
-`;
+- Write a brief session summary: \`context_write(category="sessions", ...)\``;
 
 export async function initCommand(options: { dir?: string; provider?: string }) {
   const repoRoot = options.dir || process.cwd();
@@ -81,47 +79,31 @@ Write new learnings using the \`context_write\` MCP tool during your session.
     writeFileSync(configPath, JSON.stringify(configToWrite, null, 2) + "\n");
   }
 
-  // Add agent instructions to CLAUDE.md
-  const claudeMdPath = join(repoRoot, "CLAUDE.md");
-  if (existsSync(claudeMdPath)) {
-    const existing = readFileSync(claudeMdPath, "utf-8");
-    if (!existing.includes("repomemory")) {
-      writeFileSync(claudeMdPath, existing + "\n" + CLAUDE_MD_BLOCK);
-      console.log(chalk.green("\u2713 Added repomemory instructions to existing CLAUDE.md"));
-    }
-  } else {
-    writeFileSync(claudeMdPath, `# Agent Instructions\n${CLAUDE_MD_BLOCK}`);
-    console.log(chalk.green("\u2713 Created CLAUDE.md with repomemory instructions"));
-  }
+  console.log(chalk.green("\u2713 Initialized .context/ directory\n"));
 
-  console.log(chalk.green("\u2713 Initialized .context/ directory"));
-  console.log();
-  console.log(chalk.bold("Created:"));
-  console.log(`  ${chalk.cyan(".context/index.md")}         \u2014 Quick orientation`);
-  console.log(`  ${chalk.cyan(".context/facts/")}            \u2014 Architecture & patterns`);
-  console.log(`  ${chalk.cyan(".context/decisions/")}        \u2014 Why things are this way`);
-  console.log(`  ${chalk.cyan(".context/regressions/")}      \u2014 Known gotchas`);
-  console.log(`  ${chalk.cyan(".context/sessions/")}         \u2014 Session summaries`);
-  console.log(`  ${chalk.cyan(".context/changelog/")}        \u2014 Monthly changelogs`);
-  console.log(`  ${chalk.cyan(".repomemory.json")}         \u2014 Configuration`);
-  console.log();
-  console.log(chalk.bold("Next steps:"));
-  console.log();
-  console.log(`  1. Set your API key:`);
+  console.log(chalk.bold("Next steps:\n"));
+
+  console.log(`  ${chalk.cyan("1.")} Set your API key:`);
   console.log(chalk.dim(`     export ANTHROPIC_API_KEY=sk-ant-...`));
-  console.log(chalk.dim(`     # or: export OPENAI_API_KEY=sk-...`));
-  console.log(chalk.dim(`     # or: export GEMINI_API_KEY=...`));
-  console.log(chalk.dim(`     # or: export GROK_API_KEY=...`));
   console.log();
-  console.log(`  2. Analyze your repo (AI-powered):`);
-  console.log(chalk.dim(`     repomemory analyze`));
+
+  console.log(`  ${chalk.cyan("2.")} Analyze your repo:`);
+  console.log(chalk.dim(`     npx repomemory analyze`));
   console.log();
-  console.log(`  3. Add the MCP server to your AI tool:`);
-  console.log(chalk.dim(`     repomemory setup claude     # Claude Code`));
-  console.log(chalk.dim(`     repomemory setup cursor     # Cursor`));
-  console.log(chalk.dim(`     repomemory setup copilot    # GitHub Copilot`));
-  console.log(chalk.dim(`     repomemory setup windsurf   # Windsurf`));
-  console.log(chalk.dim(`     repomemory setup cline      # Cline`));
+
+  console.log(`  ${chalk.cyan("3.")} Connect Claude Code (one-time):`);
+  console.log(chalk.dim(`     npx repomemory setup claude`));
   console.log();
-  console.log(`  4. Commit .context/ to git \u2014 your team shares the knowledge.`);
+
+  console.log(`  ${chalk.cyan("4.")} Add this to your ${chalk.bold("CLAUDE.md")} so Claude uses it automatically:`);
+  console.log();
+  console.log(chalk.cyan("  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 copy below into CLAUDE.md \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"));
+  console.log();
+  console.log(CLAUDE_MD_BLOCK);
+  console.log();
+  console.log(chalk.cyan("  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"));
+  console.log();
+
+  console.log(`  ${chalk.cyan("5.")} Commit to git:`);
+  console.log(chalk.dim(`     git add .context/ .repomemory.json CLAUDE.md && git commit -m "Add repomemory"`));
 }
