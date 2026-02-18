@@ -11,6 +11,7 @@ import { wizardCommand } from "./commands/wizard.js";
 import { dashboardCommand } from "./commands/dashboard.js";
 import { hookCommand } from "./commands/hook.js";
 import { goCommand } from "./commands/go.js";
+import { searchCommand } from "./commands/search.js";
 import {
   globalListCommand,
   globalReadCommand,
@@ -85,6 +86,15 @@ program
   .description("Show the current state of .context/ with coverage and freshness")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .action(statusCommand);
+
+program
+  .command("search <query>")
+  .description("Search the .context/ knowledge base from the terminal")
+  .option("-d, --dir <path>", "Repository root directory", process.cwd())
+  .option("-c, --category <category>", "Filter by category (facts, decisions, regressions, etc.)")
+  .option("-l, --limit <n>", "Max results to return", "10")
+  .option("--detail <level>", "Output detail: compact or full", "compact")
+  .action(searchCommand);
 
 program
   .command("wizard")

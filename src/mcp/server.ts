@@ -538,6 +538,12 @@ export async function startMcpServer(
           await searchIndex.rebuild();
         }
 
+        // Lazy-init global search index
+        if (globalExists && globalStore && !globalSearchIndex) {
+          globalSearchIndex = new SearchIndex(globalStore.path, globalStore, embeddingProvider, config.hybridAlpha);
+          await globalSearchIndex.rebuild();
+        }
+
         // Intelligent category routing: auto-detect if not explicitly provided
         let effectiveCategory = category;
         let routingNote = "";
@@ -734,11 +740,22 @@ export async function startMcpServer(
 
         // Incremental index update (not full rebuild)
         if (targetIndex) {
-          const entries = targetStore.listEntries(category);
-          const entry = entries.find((e) => e.relativePath === relativePath || e.filename === filename + ".md");
-          if (entry) {
-            await targetIndex.indexEntry(entry);
-          }
+          // Construct the entry directly instead of scanning the whole category
+          const fullContent = append ? (targetStore.readEntry(category, filename) ?? content) : content;
+          const titleMatch = fullContent.match(/^#\s+(.+)$/m);
+          const title = titleMatch
+            ? titleMatch[1]
+            : filename.replace(/-/g, " ");
+          const entry: ContextEntry = {
+            category,
+            filename: relativePath.split("/").pop() ?? filename + ".md",
+            title,
+            content: fullContent,
+            relativePath,
+            lastModified: new Date(),
+            sizeBytes: Buffer.byteLength(fullContent, "utf-8"),
+          };
+          await targetIndex.indexEntry(entry);
         }
 
         const scopeTag = globalStore ? ` [${targetScope}]` : "";
@@ -1047,7 +1064,28 @@ export async function startMcpServer(
             }
           }
 
-          // 5. Empty state warning
+          // 5. Stale entries warning (untouched for 30+ days)
+          const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+          const staleEntries = allEntries
+            .filter(
+              (e) =>
+                e.category !== "sessions" &&
+                e.category !== "changelog" &&
+                e.category !== "root" &&
+                e.lastModified.getTime() < thirtyDaysAgo
+            )
+            .sort((a, b) => a.lastModified.getTime() - b.lastModified.getTime())
+            .slice(0, 10);
+
+          if (staleEntries.length > 0) {
+            parts.push("\n# Potentially Stale Entries\n");
+            parts.push("> These entries haven't been updated in 30+ days. They may still be accurate — verify before relying on them.\n");
+            for (const e of staleEntries) {
+              parts.push(`- ${e.category}/${e.filename}: ${e.title} (${getRelativeTime(e.lastModified)})`);
+            }
+          }
+
+          // 6. Empty state warning
           const stats = store.getStats();
           if (stats.totalFiles === 0 || (stats.categories["facts"] || 0) === 0) {
             parts.push("\n> **Note**: Context is mostly empty. Ask the user to run `npx repomemory analyze` to populate with architecture knowledge.");
@@ -1142,7 +1180,7 @@ export async function startMcpServer(
 
     // Auto-write session summary if there was meaningful activity
     const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
-    const hasActivity = session.toolCalls.length > 2 && duration > 60;
+    const hasActivity = session.writeCallMade || session.toolCalls.length > 2;
 
     if (hasActivity && store.exists()) {
       try {

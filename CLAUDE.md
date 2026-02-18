@@ -54,6 +54,7 @@ src/
 │   ├── dashboard.ts          # Localhost web UI with edit, server-side search, export.
 │   ├── hook.ts               # Git post-commit hook install/uninstall.
 │   ├── go.ts                 # One-command setup: init + analyze + setup claude + global profile.
+│   ├── search.ts             # CLI search across repo + global context. Hybrid FTS5 + vector.
 │   └── global.ts             # Manage global developer context (~/.repomemory/global/).
 │                               list, read, write, delete, export, import subcommands.
 ├── mcp/
@@ -140,6 +141,7 @@ node dist/index.js --help
 | `serve` | serve.ts | MCP server |
 | `setup <tool>` | setup.ts | Tool integration (7 tools) |
 | `status` | status.ts | Coverage + freshness |
+| `search <query>` | search.ts | Search knowledge base from terminal (--category, --limit, --detail) |
 | `dashboard` | dashboard.ts | Web UI on localhost:3333 |
 | `hook <action>` | hook.ts | Git hook install/uninstall |
 | `global <action>` | global.ts | Manage global context (list/read/write/delete/export/import) |
