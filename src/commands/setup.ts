@@ -34,36 +34,51 @@ export async function setupCommand(
   }
 }
 
-function setupClaude(repoRoot: string) {
-  const claudeDir = join(repoRoot, ".claude");
-  mkdirSync(claudeDir, { recursive: true });
+function setupClaude(_repoRoot: string) {
+  // Write to global ~/.claude/settings.json — this is what Claude Code actually reads
+  // Project-level .claude/settings.json doesn't reliably load MCP servers
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+  const globalClaudeDir = join(homeDir, ".claude");
+  mkdirSync(globalClaudeDir, { recursive: true });
 
-  const settingsPath = join(claudeDir, "settings.json");
+  const globalSettingsPath = join(globalClaudeDir, "settings.json");
   let settings: Record<string, unknown> = {};
 
-  if (existsSync(settingsPath)) {
+  if (existsSync(globalSettingsPath)) {
     try {
-      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      settings = JSON.parse(readFileSync(globalSettingsPath, "utf-8"));
     } catch {
       // Start fresh
     }
   }
 
   const mcpServers = (settings.mcpServers || {}) as Record<string, unknown>;
+
+  // Check if already configured
+  if (mcpServers["repomemory"]) {
+    console.log(chalk.green("\n\u2713 Claude Code already configured with repomemory.\n"));
+    console.log(chalk.dim(`  Config: ${globalSettingsPath}`));
+    console.log(chalk.dim("  Restart Claude Code if it's running to pick up changes."));
+    return;
+  }
+
   mcpServers["repomemory"] = {
     command: "npx",
     args: ["-y", "repomemory", "serve"],
   };
   settings.mcpServers = mcpServers;
 
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  writeFileSync(globalSettingsPath, JSON.stringify(settings, null, 2) + "\n");
 
   console.log(chalk.green("\n\u2713 Claude Code configured!\n"));
-  console.log(chalk.bold("Added to .claude/settings.json:"));
+  console.log(chalk.bold(`Added to ${globalSettingsPath}:`));
   console.log(chalk.dim(JSON.stringify({ "repomemory": mcpServers["repomemory"] }, null, 2)));
   console.log();
-  console.log(chalk.dim("The MCP server will auto-start when Claude Code opens this project."));
-  console.log(chalk.dim("Your agent can use context_search, context_write, context_read, context_list, and context_delete."));
+  console.log(chalk.dim("The MCP server will auto-start when you open Claude Code in any project."));
+  console.log(chalk.dim("In repos without .context/, the tools are inert (no noise, no errors)."));
+  console.log(chalk.dim("Run `repomemory init && repomemory analyze` in each repo you want to use it."));
+  console.log();
+  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete"));
 }
 
 function setupCursor(repoRoot: string) {
