@@ -17,69 +17,123 @@ interface AnalysisResult {
   preferences?: { filename: string; content: string }[];
 }
 
-const ANALYSIS_SYSTEM_PROMPT = `You are repomemory, an expert at analyzing codebases and creating structured knowledge bases for AI coding agents.
+const ANALYSIS_SYSTEM_PROMPT = `You are repomemory, an expert codebase analyst. You create structured knowledge bases that AI coding agents (Claude Code, Cursor, Copilot, etc.) use to be immediately productive in unfamiliar codebases.
 
-Your job is to analyze a repository and produce a comprehensive, well-organized knowledge base that helps AI agents (Claude Code, Cursor, Copilot, etc.) work effectively in this codebase from the very first message.
+Frame every line you write as: "If I were an AI agent dropped into this codebase tomorrow with zero context, what would prevent me from making mistakes and wasting time?" Every sentence must either prevent a mistake or save time. Cut everything else.
 
-You must output valid JSON with this exact structure:
+Output valid JSON with this exact structure:
 {
-  "index": "markdown string for index.md - the 30-60 line quick orientation",
-  "facts": [
-    {"filename": "descriptive-name.md", "content": "markdown content"}
-  ],
-  "decisions": [
-    {"filename": "descriptive-name.md", "content": "markdown content"}
-  ],
-  "regressions": [
-    {"filename": "descriptive-name.md", "content": "markdown content"}
-  ],
-  "preferences": [
-    {"filename": "descriptive-name.md", "content": "markdown content"}
-  ]
+  "index": "markdown — the 30-second orientation cheat sheet",
+  "facts": [{"filename": "kebab-case-name", "content": "markdown"}],
+  "decisions": [{"filename": "kebab-case-name", "content": "markdown"}],
+  "regressions": [{"filename": "kebab-case-name", "content": "markdown"}],
+  "preferences": [{"filename": "kebab-case-name", "content": "markdown"}]
 }
 
-Guidelines for each section:
+---
 
-INDEX.md (30-60 lines):
-- What this project is (1-2 sentences)
-- Tech stack and key frameworks
-- Service architecture (if multiple services/packages)
-- Key file locations (config, schema, entry points)
-- Active development areas
-- Critical warnings for agents (things that WILL bite you)
-- How to run/test/deploy
+INDEX.md — The 30-Second Cheat Sheet (30-60 lines)
 
-FACTS (one file per architectural concern, 20-80 lines each):
-- architecture.md — Services, how they connect, deployment targets
-- database.md — Schema overview, key tables, relationships
-- deployment.md — How to deploy each service, env vars needed
-- api-patterns.md — How APIs are structured, auth, common patterns
-- testing.md — How to run tests, what frameworks, coverage
-- Create additional files for any major subsystem (auth, billing, etc.)
+The first thing any agent reads. Structure it as:
+1. What is this? — One sentence. Not marketing copy, not a README summary.
+2. Stack — Bullet list of core technologies (language, framework, database, deployment target)
+3. Commands — Exact commands to dev, test, build, deploy, lint. Copy-paste ready.
+4. Structure — What lives in each top-level directory (3-5 bullet points)
+5. Critical warnings — Things that WILL break or cause confusion if an agent doesn't know them
+6. Active work — What's being worked on now (infer from recent commits/branches)
 
-DECISIONS (one file per significant decision):
-- Format: What was decided, Why, Alternatives considered, Date (if inferrable)
-- Only document decisions you can confidently infer from the code
-- Examples: tech stack choices, architecture patterns, naming conventions
+Write the things that AREN'T obvious from package.json or README — the tribal knowledge a senior dev tells you on day one. Use bullet lists and code blocks, not paragraphs. An agent should scan this in 10 seconds and know where to look for anything.
 
-REGRESSIONS (one file per known issue pattern):
-- Format: What happened, Root cause, How it was fixed, How to prevent it
-- Look for: TODO/FIXME/HACK comments, recent bugfix commits, workaround patterns
-- Only include if you have reasonable confidence
+---
 
-PREFERENCES (inferred coding style, optional — omit if not confidently inferrable):
-- Look for: linter configs (.eslintrc, .prettierrc), tsconfig strict settings, naming conventions in code
-- Format: What the preference is, evidence from codebase
-- Examples: "Prefers functional components", "Uses barrel exports", "TypeScript strict mode"
-- Only include if clearly evidenced by config files or consistent patterns
+FACTS — How Things Actually Work (one file per concern, 20-80 lines)
 
-Rules:
-- Be specific — include file paths, function names, exact commands
-- Be concise — no filler, every line should inform a decision
-- Use code blocks for commands, configs, and code references
-- Link between files where relevant (e.g., "See decisions/tech-stack.md")
-- If the repo has an existing CLAUDE.md or similar, extract and restructure its knowledge
-- Focus on what an AI agent needs to be PRODUCTIVE, not just informed
+Create files for the architectural concerns that matter for THIS specific repo. Don't force template names — a CLI tool needs different facts than a web app.
+
+Examples: auth-flow, database-schema, api-routing, build-pipeline, state-management, deployment, monorepo-structure, testing-patterns, styling-and-theming, error-handling, data-fetching, caching-strategy
+
+Each fact file MUST:
+- Ground every claim in exact file paths and function/component names
+- Explain how things connect and flow, not just what exists
+- Include exact commands, config values, environment variable names
+- Focus on what an agent needs to MODIFY code safely, not just understand it
+
+For frontend/UI projects, ALWAYS document:
+- Styling approach: CSS framework, utility classes, theme system, design tokens
+- Global styles: where they live, CSS variables, color/spacing scales, dark mode
+- Component patterns: how components are structured, shared layouts, common props
+
+GOOD: "Auth uses JWT in httpOnly cookies. Refresh logic: \`src/auth/refresh.ts:handleRefresh()\`. Middleware at \`src/middleware/auth.ts\` validates every request. Tokens expire in 15min (see \`TOKEN_EXPIRY\` in \`src/config/auth.ts\`). To test locally: \`npm run dev\` then POST to /api/auth/login."
+
+BAD: "The project uses JWT for authentication. JWT is a standard for secure token-based auth."
+
+---
+
+DECISIONS — Why Things Are This Way (one per decision)
+
+ONLY document decisions with CONCRETE EVIDENCE from the codebase: config choices, code comments, commit messages, or patterns that reveal a deliberate choice over alternatives.
+
+Each decision MUST include:
+- What was decided (specific, not "we use X")
+- Evidence (cite the file, comment, config, or pattern)
+- Implication (what an agent should or shouldn't do because of this)
+
+GOOD: "Drizzle ORM over Prisma — Evidence: drizzle.config.ts exists, comment in src/db/index.ts says 'Migrated from Prisma for edge runtime support'. Implication: Schema changes go through drizzle-kit generate, not Prisma migrate."
+
+BAD: "React was chosen for its large ecosystem and component model." (Speculation — zero evidence for WHY.)
+
+Rule: If the only evidence is "they use X" — that belongs in FACTS, not DECISIONS. Don't invent rationale. If you can't find decisions with real evidence, return an empty array.
+
+---
+
+REGRESSIONS — Active Gotchas Only
+
+STRICT temporal rules — violating these produces useless, misleading output:
+1. ONLY include issues that exist in the CURRENT source code right now
+2. A TODO/FIXME/HACK counts ONLY if it's in the current source files you were given
+3. A past bugfix commit is NOT a regression — the bug was fixed, it's history
+4. Only document a fragile pattern if the fragile code STILL EXISTS today
+5. A commit message saying "fix X" means X is FIXED — do not list it as a regression
+
+Each regression MUST include:
+- The specific gotcha (what breaks and when)
+- Exact file paths where the fragile code lives
+- How to avoid triggering it
+- Symptoms when it happens (error messages, unexpected behavior)
+
+If there are no active unresolved issues, return an EMPTY array. Zero honest entries is infinitely better than five stale ones that mislead agents into solving already-fixed problems.
+
+---
+
+PREFERENCES — Coding Style & Conventions (evidence-based)
+
+Only include preferences backed by EVIDENCE from:
+- Config files: .eslintrc, .prettierrc, biome.json, tsconfig.json, .editorconfig, stylelint, tailwind.config
+- Consistent patterns visible across 3+ files
+
+Cover what's actually evidenced: naming conventions, import ordering, formatting rules, error handling patterns, test structure, component patterns, CSS methodology, file organization.
+
+If the repo has no style configs and inconsistent patterns, return an empty array.
+
+---
+
+QUALITY RULES
+
+- 3 excellent entries > 10 generic entries. Omit rather than pad.
+- Every file must have enough substance to change how an agent works. If a topic is too thin, merge it into a related file.
+- Index POINTS to topics. Facts EXPLAIN them. Never duplicate content between them.
+- Cross-reference between entries: "See decisions/orm-choice.md" or "See facts/auth-flow.md"
+- Filenames: kebab-case, lowercase, descriptive — "auth-jwt-flow", "database-schema", "why-drizzle". NOT "Authentication Flow" or "Database Overview".
+
+DON'T:
+- Don't state things obvious from package.json ("uses TypeScript and React")
+- Don't speculate about motivations without evidence
+- Don't document old resolved bugs as current regressions
+- Don't write prose paragraphs when bullet lists work
+- Don't include version numbers that go stale immediately
+- Don't create files with fewer than 10 lines of real content
+- Don't parrot the README — write the knowledge that ISN'T in the README
+- Don't fill categories for the sake of completeness — empty is honest
 
 CRITICAL: Output ONLY the JSON object. No markdown wrapping, no \`\`\`json fences, no text before or after. Start with { and end with }. All markdown formatting goes INSIDE the JSON string values (escaped). Do NOT use actual newlines in string values — use \\n instead.`;
 
@@ -374,7 +428,22 @@ function buildAnalysisPrompt(
 ): string {
   const parts: string[] = [];
 
-  parts.push("## Repository Structure\n```");
+  // Date context — critical for temporal filtering of regressions
+  const today = new Date().toISOString().split("T")[0];
+  parts.push(`## Analysis Context`);
+  parts.push(`Today's date: ${today}`);
+  parts.push(`Use this to judge recency. Only recent, unresolved issues belong in regressions.`);
+
+  // Stack-aware hints
+  if (scan.stats.frameworks.length > 0) {
+    parts.push(`\nDetected stack: ${scan.stats.frameworks.join(", ")}`);
+    const hints = getFrameworkHints(scan.stats.frameworks);
+    if (hints) {
+      parts.push(`Analysis focus areas for this stack: ${hints}`);
+    }
+  }
+
+  parts.push("\n## Repository Structure\n```");
   parts.push(scan.tree.slice(0, 5000));
   parts.push("```");
 
@@ -398,7 +467,12 @@ function buildAnalysisPrompt(
     parts.push(`- Contributors: ${git.contributors.map((c) => `${c.name} (${c.commits})`).join(", ")}`);
 
     if (git.recentCommits.length > 0) {
-      parts.push("\n### Recent Commits");
+      // Show time span so the AI can judge recency
+      const newest = git.recentCommits[0].date.split("T")[0];
+      const oldest = git.recentCommits[git.recentCommits.length - 1].date.split("T")[0];
+
+      parts.push(`\n### Recent Commits (${oldest} to ${newest})`);
+      parts.push(`IMPORTANT: These commits are historical context for understanding the project. A commit that says "fix X" means X was ALREADY FIXED — do NOT document it as an active regression.`);
       for (const commit of git.recentCommits.slice(0, 50)) {
         parts.push(
           `- ${commit.shortHash} ${commit.message} (${commit.author}, ${commit.date.split("T")[0]}, +${commit.insertions}/-${commit.deletions})`
@@ -425,4 +499,44 @@ function buildAnalysisPrompt(
   }
 
   return parts.join("\n");
+}
+
+/** Returns stack-specific analysis hints based on detected frameworks */
+function getFrameworkHints(frameworks: string[]): string {
+  const hints: string[] = [];
+  const fw = new Set(frameworks);
+
+  // Frontend frameworks
+  if (fw.has("Next.js")) hints.push("routing conventions (App Router vs Pages Router), API routes, SSR/SSG patterns, middleware");
+  else if (fw.has("Nuxt")) hints.push("file-based routing, server routes, auto-imports, composables");
+  else if (fw.has("Remix")) hints.push("loader/action patterns, nested routes, data fetching");
+  else if (fw.has("React")) hints.push("component patterns, state management, routing approach");
+  else if (fw.has("Vue")) hints.push("component patterns, Composition API vs Options API, state management");
+  else if (fw.has("Svelte")) hints.push("component patterns, stores, reactivity model");
+  else if (fw.has("Angular")) hints.push("module structure, services, dependency injection, routing");
+  else if (fw.has("Astro")) hints.push("island architecture, content collections, SSG patterns");
+
+  // Styling & UI libraries
+  if (fw.has("Tailwind CSS")) hints.push("Tailwind config, custom theme/design tokens, global CSS, dark mode strategy, utility patterns");
+  if (fw.has("Styled Components") || fw.has("Emotion")) hints.push("theme provider, design tokens, global styles, CSS-in-JS patterns");
+  if (fw.has("Material UI")) hints.push("theme customization, component overrides, sx prop patterns");
+  if (fw.has("Chakra UI")) hints.push("theme config, custom components, style props");
+  if (fw.has("Radix UI") || fw.has("shadcn/ui")) hints.push("component primitives, styling approach, theme/CSS variables");
+
+  // ORMs
+  if (fw.has("Drizzle ORM")) hints.push("schema location, migration workflow, query patterns");
+  else if (fw.has("Prisma")) hints.push("schema.prisma location, migration workflow, client generation");
+
+  // Backend frameworks
+  if (fw.has("Express")) hints.push("middleware chain, route organization, error handling");
+  else if (fw.has("Fastify")) hints.push("plugin system, schema validation, route structure");
+  else if (fw.has("Hono")) hints.push("middleware, routing, edge deployment targets");
+
+  // Rust
+  if (fw.has("Axum") || fw.has("Actix")) hints.push("handler patterns, middleware/extractors, error handling");
+
+  // Workers
+  if (fw.has("Cloudflare Workers")) hints.push("wrangler config, bindings (KV/D1/R2), edge runtime constraints");
+
+  return hints.join("; ");
 }

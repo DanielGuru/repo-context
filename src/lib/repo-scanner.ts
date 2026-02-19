@@ -227,6 +227,12 @@ export function scanRepo(
     if (allDeps["remix"] || allDeps["@remix-run/node"]) frameworks.push("Remix");
     if (allDeps["angular"] || allDeps["@angular/core"]) frameworks.push("Angular");
     if (allDeps["tailwindcss"]) frameworks.push("Tailwind CSS");
+    if (allDeps["styled-components"]) frameworks.push("Styled Components");
+    if (allDeps["@emotion/react"] || allDeps["@emotion/styled"]) frameworks.push("Emotion");
+    if (allDeps["@mui/material"]) frameworks.push("Material UI");
+    if (allDeps["@chakra-ui/react"]) frameworks.push("Chakra UI");
+    if (allDeps["@radix-ui/react-slot"] || allDeps["@radix-ui/themes"]) frameworks.push("Radix UI");
+    if (allDeps["shadcn-ui"] || allDeps["class-variance-authority"]) frameworks.push("shadcn/ui");
   } catch {
     // No package.json or can't parse
   }
