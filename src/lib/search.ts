@@ -40,6 +40,15 @@ async function getSqlJs(): Promise<SqlJsStatic> {
   return initSqlJsPromise;
 }
 
+interface CachedEmbedding {
+  category: string;
+  filename: string;
+  title: string;
+  content: string;
+  relativePath: string;
+  embedding: Float32Array;
+}
+
 export class SearchIndex {
   private db: SqlJsDatabase | null = null;
   private initPromise: Promise<SqlJsDatabase> | null = null;
@@ -49,6 +58,11 @@ export class SearchIndex {
   private hasFts5 = false;
   private embeddingProvider: EmbeddingProvider | null;
   private alpha: number;
+
+  // In-memory embedding cache — avoids re-fetching from SQLite on every semantic query.
+  // Invalidated whenever an entry is added, updated, or removed.
+  private embeddingCache: CachedEmbedding[] | null = null;
+  private embeddingCacheDirty = true;
 
   constructor(
     contextDir: string,
@@ -251,6 +265,9 @@ export class SearchIndex {
       await this.embedMissingEntries(entries);
     }
 
+    // Invalidate in-memory cache so next semantic query reloads fresh embeddings
+    this.embeddingCacheDirty = true;
+
     this.save();
   }
 
@@ -336,6 +353,7 @@ export class SearchIndex {
     );
 
     this.dirty = true;
+    this.embeddingCacheDirty = true;
   }
 
   async removeEntry(category: string, filename: string): Promise<void> {
@@ -345,6 +363,7 @@ export class SearchIndex {
       [category, filename]
     );
     this.dirty = true;
+    this.embeddingCacheDirty = true;
   }
 
   async search(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
@@ -487,7 +506,50 @@ export class SearchIndex {
     }
   }
 
-  /** Semantic search using embeddings + cosine similarity */
+  /**
+   * Load (or return cached) in-memory embedding array.
+   * This avoids re-fetching all embedding blobs from SQLite on every semantic query.
+   * Cache is invalidated whenever indexEntry() or removeEntry() is called.
+   */
+  private async getEmbeddingCache(): Promise<CachedEmbedding[]> {
+    if (this.embeddingCache !== null && !this.embeddingCacheDirty) {
+      return this.embeddingCache;
+    }
+
+    const db = await this.ensureDb();
+    const results = db.exec(
+      "SELECT category, filename, title, content, relative_path, embedding, embedding_dims FROM documents WHERE embedding IS NOT NULL AND embedding_dims > 0"
+    );
+
+    const cache: CachedEmbedding[] = [];
+
+    if (results.length && results[0].values.length) {
+      for (const row of results[0].values) {
+        const embBlob = row[5] as Uint8Array;
+        const dims = row[6] as number;
+        if (!embBlob || dims === 0 || embBlob.byteLength !== dims * 4) continue;
+
+        // Copy buffer out of sql.js WASM heap before caching
+        const buffer = new ArrayBuffer(dims * 4);
+        new Uint8Array(buffer).set(new Uint8Array(embBlob.buffer, embBlob.byteOffset, dims * 4));
+
+        cache.push({
+          category: row[0] as string,
+          filename: row[1] as string,
+          title: row[2] as string,
+          content: row[3] as string,
+          relativePath: row[4] as string,
+          embedding: new Float32Array(buffer),
+        });
+      }
+    }
+
+    this.embeddingCache = cache;
+    this.embeddingCacheDirty = false;
+    return cache;
+  }
+
+  /** Semantic search using in-memory cached embeddings + cosine similarity */
   private async searchSemantic(
     query: string,
     category?: string,
@@ -495,42 +557,24 @@ export class SearchIndex {
   ): Promise<SearchResult[]> {
     if (!this.embeddingProvider) return [];
 
-    const db = await this.ensureDb();
     const [queryEmbedding] = await this.embeddingProvider.embed([query]);
+    const cache = await this.getEmbeddingCache();
 
-    // Get all documents with embeddings
-    let sql =
-      "SELECT id, category, filename, title, content, relative_path, embedding, embedding_dims FROM documents WHERE embedding IS NOT NULL AND embedding_dims > 0";
-    const params: unknown[] = [];
-    if (category) {
-      sql += " AND category = ?";
-      params.push(category);
-    }
+    if (cache.length === 0) return [];
 
-    const results = db.exec(sql, params);
-    if (!results.length || !results[0].values.length) return [];
-
-    // Compute cosine similarity for each
     const scored: SearchResult[] = [];
-    for (const row of results[0].values) {
-      const embBlob = row[6] as Uint8Array;
-      const dims = row[7] as number;
-      if (!embBlob || embBlob.byteLength !== dims * 4) continue;
-      if (dims !== queryEmbedding.length) continue;
+    for (const doc of cache) {
+      if (category && doc.category !== category) continue;
+      if (doc.embedding.length !== queryEmbedding.length) continue;
 
-      // Copy the buffer to avoid sharing with sql.js internals
-      const buffer = new ArrayBuffer(dims * 4);
-      new Uint8Array(buffer).set(new Uint8Array(embBlob.buffer, embBlob.byteOffset, dims * 4));
-      const docEmbedding = new Float32Array(buffer);
-      const similarity = cosineSimilarity(queryEmbedding, docEmbedding);
-
+      const similarity = cosineSimilarity(queryEmbedding, doc.embedding);
       scored.push({
-        category: row[1] as string,
-        filename: row[2] as string,
-        title: row[3] as string,
-        snippet: this.extractSnippet(row[4] as string, query),
+        category: doc.category,
+        filename: doc.filename,
+        title: doc.title,
+        snippet: this.extractSnippet(doc.content, query),
         score: similarity,
-        relativePath: row[5] as string,
+        relativePath: doc.relativePath,
       });
     }
 

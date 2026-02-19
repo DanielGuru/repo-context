@@ -28,7 +28,8 @@
 - Uses `@google/generative-ai` SDK
 
 ## Embedding Providers (src/lib/embeddings.ts)
-- OpenAI: `text-embedding-3-small`
+- Gemini: `text-embedding-004` (default — free, strong on technical/code content)
+- OpenAI: `text-embedding-3-small` (fallback — paid, strong on natural language)
 - Gemini: via `@google/generative-ai`
 - `createEmbeddingProvider()` auto-detects from available API keys
 - Falls back gracefully to keyword-only search when no embedding key available
