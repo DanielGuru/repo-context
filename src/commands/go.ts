@@ -188,6 +188,32 @@ export async function goCommand(options: {
     console.log(chalk.dim(`${currentStep}/${totalSteps} Could not detect home directory. Skipping Claude setup.`));
   }
 
+  // Step 2b: Configure Cursor if installed
+  const cursorDir = join(homeDir, ".cursor");
+  if (homeDir && existsSync(cursorDir)) {
+    const cursorMcpPath = join(cursorDir, "mcp.json");
+    let cursorNeedsSetup = true;
+
+    if (existsSync(cursorMcpPath)) {
+      try {
+        const cursorCfg = JSON.parse(readFileSync(cursorMcpPath, "utf-8"));
+        const servers = (cursorCfg.mcpServers || {}) as Record<string, unknown>;
+        if (servers["repomemory"]) cursorNeedsSetup = false;
+      } catch {
+        // Malformed — will be fixed by setup
+      }
+    }
+
+    if (cursorNeedsSetup) {
+      try {
+        await setupCommand("cursor", { dir: repoRoot });
+        steps.push("Configured Cursor MCP server + rules");
+      } catch {
+        // Non-blocking — user can run manually
+      }
+    }
+  }
+
   // Step 3: Run analyze if context is mostly empty
   currentStep++;
   const needsAnalysis = needsSetup && !options.skipAnalyze;

@@ -172,33 +172,86 @@ exit 0
 }
 
 function setupCursor(repoRoot: string) {
-  const cursorDir = join(repoRoot, ".cursor", "rules");
-  mkdirSync(cursorDir, { recursive: true });
+  // --- Part 1: Global MCP server in ~/.cursor/mcp.json ---
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+  const cursorConfigDir = join(homeDir, ".cursor");
+  const mcpConfigPath = join(cursorConfigDir, "mcp.json");
+
+  let mcpAlreadyConfigured = false;
+
+  if (homeDir && existsSync(cursorConfigDir)) {
+    let mcpConfig: Record<string, unknown> = {};
+
+    if (existsSync(mcpConfigPath)) {
+      try {
+        mcpConfig = JSON.parse(readFileSync(mcpConfigPath, "utf-8"));
+      } catch {
+        mcpConfig = {};
+      }
+    }
+
+    const mcpServers = (mcpConfig.mcpServers || {}) as Record<string, unknown>;
+
+    if (mcpServers["repomemory"]) {
+      mcpAlreadyConfigured = true;
+    } else {
+      mcpServers["repomemory"] = {
+        command: "npx",
+        args: ["-y", "repomemory", "serve"],
+      };
+      mcpConfig.mcpServers = mcpServers;
+      writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+    }
+  }
+
+  // --- Part 2: Project-level .cursor/rules/repomemory.mdc ---
+  const cursorRulesDir = join(repoRoot, ".cursor", "rules");
+  mkdirSync(cursorRulesDir, { recursive: true });
 
   const ruleContent = `---
 description: Repository context and memory system
 globs: **/*
 ---
 
-# Repository Context
+# Repository Memory (repomemory)
 
-This project uses repomemory for persistent AI memory.
+This project uses repomemory for persistent AI memory via MCP tools.
 
-## Quick Orientation
-Read \`.context/index.md\` for immediate project understanding.
+**IMPORTANT: Before starting ANY task, you MUST call \`context_search\` with relevant
+keywords. This is NOT optional. The knowledge base contains architecture docs,
+past decisions, and known regressions that WILL save you from mistakes.
+Do NOT skip this step even if the task seems simple.**
 
-## Before Making Changes
-- Search \`.context/facts/\` for architecture documentation
-- Check \`.context/decisions/\` before proposing alternative approaches
-- Review \`.context/regressions/\` before touching fragile code
+**ALWAYS at the start of every task:**
+1. Call \`context_search\` with keywords related to your task
+2. If this is a new session, call \`context_auto_orient\` for a full project overview
+3. NEVER propose changes without first checking for past decisions
 
-## During Your Session
-- Document important discoveries in \`.context/sessions/\`
-- If you find a bug pattern, note it in \`.context/regressions/\`
-- If you make an architectural decision, record it in \`.context/decisions/\`
-- Record coding style preferences in \`.context/preferences/\`
+**During your session:**
+- ALWAYS use \`context_write\` to record discoveries, decisions, and gotchas
+- ALWAYS use \`context_delete\` to remove stale or incorrect knowledge
+- Record coding preferences in \`context_write(category="preferences", ...)\`
 
-## Context Files
+**Before modifying code:**
+- You MUST search for known regressions related to the component
+- You MUST check for past decisions before proposing alternatives
+
+**At end of session (REQUIRED):**
+- Write a session summary: \`context_write(category="sessions", ...)\`
+- Route discoveries to the right category (facts/, decisions/, preferences/)
+
+## MCP Tools Available
+
+| Tool | Description |
+|------|-------------|
+| \`context_search\` | Search knowledge base (hybrid keyword + semantic) |
+| \`context_write\` | Write/append knowledge entries |
+| \`context_read\` | Read full content of an entry |
+| \`context_list\` | List all entries by category |
+| \`context_delete\` | Remove stale entries |
+| \`context_auto_orient\` | Full project orientation in one call |
+
+## Context Structure
 \`\`\`
 .context/
 \u251c\u2500\u2500 index.md          \u2014 Quick orientation
@@ -211,12 +264,35 @@ Read \`.context/index.md\` for immediate project understanding.
 \`\`\`
 `;
 
-  writeFileSync(join(cursorDir, "repomemory.mdc"), ruleContent);
+  writeFileSync(join(cursorRulesDir, "repomemory.mdc"), ruleContent);
+
+  // --- Output ---
+  if (mcpAlreadyConfigured) {
+    console.log(chalk.green("\n\u2713 Cursor configured!\n"));
+    console.log(`  ${chalk.green("\u2713")} MCP server already in ${mcpConfigPath}`);
+    console.log(`  ${chalk.green("\u2713")} Updated .cursor/rules/repomemory.mdc`);
+    console.log();
+    console.log(chalk.dim("Restart Cursor to pick up any changes."));
+    return;
+  }
 
   console.log(chalk.green("\n\u2713 Cursor configured!\n"));
+
+  if (homeDir && existsSync(cursorConfigDir)) {
+    console.log(chalk.bold(`MCP server added to ${mcpConfigPath}:`));
+    console.log(chalk.dim(JSON.stringify({ "repomemory": { command: "npx", args: ["-y", "repomemory", "serve"] } }, null, 2)));
+    console.log();
+  } else {
+    console.log(chalk.yellow("  \u26a0 ~/.cursor/ not found. Install Cursor, then add the MCP server manually:"));
+    console.log(chalk.dim(`  Add to ~/.cursor/mcp.json:`));
+    console.log(chalk.dim(JSON.stringify({ mcpServers: { "repomemory": { command: "npx", args: ["-y", "repomemory", "serve"] } } }, null, 2)));
+    console.log();
+  }
+
   console.log(`  ${chalk.green("\u2713")} Created .cursor/rules/repomemory.mdc`);
   console.log();
-  console.log(chalk.dim("Cursor will auto-load the repomemory rule for all files."));
+  console.log(chalk.dim("Restart Cursor to activate. The MCP server will auto-start in every project."));
+  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient"));
 }
 
 function setupCopilot(repoRoot: string) {

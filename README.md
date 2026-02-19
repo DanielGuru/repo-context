@@ -261,7 +261,7 @@ Shows coverage bars, freshness indicators, stale file warnings, and suggestions.
 | Tool | Integration | Command |
 |------|------------|---------|
 | **Claude Code** | MCP server (auto-starts) | `repomemory setup claude` |
-| **Cursor** | .cursor/rules/ | `repomemory setup cursor` |
+| **Cursor** | MCP server + .cursor/rules/ | `repomemory setup cursor` |
 | **GitHub Copilot** | copilot-instructions.md | `repomemory setup copilot` |
 | **Windsurf** | .windsurfrules | `repomemory setup windsurf` |
 | **Cline** | .clinerules | `repomemory setup cline` |
