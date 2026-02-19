@@ -64,12 +64,12 @@ export async function goCommand(options: {
   // Determine embedding provider — ask if context is empty (unless CLI flag provided)
   let embeddingProvider = options.embeddingProvider;
   if (!embeddingProvider && needsSetup) {
-    const embeddingKeys: { provider: string; label: string }[] = [];
+    const embeddingKeys: { provider: string; label: string; hint?: string }[] = [];
+    if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+      embeddingKeys.push({ provider: "gemini", label: "Gemini (text-embedding-004)", hint: "Free, recommended" });
+    }
     if (process.env.OPENAI_API_KEY) {
       embeddingKeys.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
-    }
-    if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      embeddingKeys.push({ provider: "gemini", label: "Gemini (text-embedding-004)" });
     }
 
     if (embeddingKeys.length > 0) {

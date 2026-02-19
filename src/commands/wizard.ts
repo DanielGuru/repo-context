@@ -131,12 +131,12 @@ export async function wizardCommand(options: { dir?: string }) {
   }
 
   // Step 4: Embedding provider for semantic search
-  const embeddingKeys: { provider: string; label: string }[] = [];
+  const embeddingKeys: { provider: string; label: string; hint?: string }[] = [];
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    embeddingKeys.push({ provider: "gemini", label: "Gemini (text-embedding-004)", hint: "Free, recommended" });
+  }
   if (process.env.OPENAI_API_KEY) {
     embeddingKeys.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
-  }
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    embeddingKeys.push({ provider: "gemini", label: "Gemini (text-embedding-004)" });
   }
 
   let selectedEmbedding: string | undefined;

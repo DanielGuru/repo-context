@@ -85,25 +85,13 @@ function setupClaude(repoRoot: string) {
     }
   }
 
-  // Check if hook already exists
-  const existingHooks = projectSettings.hooks as Record<string, unknown[]> | undefined;
-  if (existingHooks?.PostToolUse) {
-    const hasRepomemoryHook = JSON.stringify(existingHooks.PostToolUse).includes("repomemory");
-    if (hasRepomemoryHook) {
-      hookAlreadyConfigured = true;
-    }
-  }
+  // Always write/update the hook script (fixes upgrades from broken versions)
+  mkdirSync(claudeDir, { recursive: true });
+  const hooksDir = join(claudeDir, "hooks");
+  mkdirSync(hooksDir, { recursive: true });
+  const hookScriptPath = join(hooksDir, "post-commit-context.sh");
 
-  if (!hookAlreadyConfigured) {
-    mkdirSync(claudeDir, { recursive: true });
-
-    // Write hook script
-    const hooksDir = join(claudeDir, "hooks");
-    mkdirSync(hooksDir, { recursive: true });
-    const hookScriptPath = join(hooksDir, "post-commit-context.sh");
-
-    if (!existsSync(hookScriptPath)) {
-      const hookScript = `#!/bin/bash
+  const hookScript = `#!/bin/bash
 # repomemory: remind agent to record context after git commits
 # Installed by: repomemory setup claude
 
@@ -119,10 +107,19 @@ fi
 
 exit 0
 `;
-      writeFileSync(hookScriptPath, hookScript);
-      chmodSync(hookScriptPath, "755");
-    }
+  writeFileSync(hookScriptPath, hookScript);
+  chmodSync(hookScriptPath, "755");
 
+  // Add hook to .claude/settings.json if not already present
+  const existingHooks = projectSettings.hooks as Record<string, unknown[]> | undefined;
+  if (existingHooks?.PostToolUse) {
+    const serialized = JSON.stringify(existingHooks.PostToolUse);
+    if (serialized.includes("post-commit-context")) {
+      hookAlreadyConfigured = true;
+    }
+  }
+
+  if (!hookAlreadyConfigured) {
     const postToolUseHook = {
       matcher: "Bash",
       hooks: [
