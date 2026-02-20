@@ -10,20 +10,24 @@ past decisions, and known regressions that WILL save you from mistakes.
 Do NOT skip this step even if the task seems simple.**
 
 **ALWAYS at the start of every task:**
+
 1. Call `context_search` with keywords related to your task
 2. If this is a new session, call `context_auto_orient` for a full project overview
 3. NEVER propose changes without first checking for past decisions
 
 **During your session:**
+
 - ALWAYS use `context_write` to record discoveries, decisions, and gotchas
 - ALWAYS use `context_delete` to remove stale or incorrect knowledge
 - Record coding preferences in `context_write(category="preferences", ...)`
 
 **Before modifying code:**
+
 - You MUST search for known regressions related to the component
 - You MUST check for past decisions before proposing alternatives
 
 **At end of session (REQUIRED):**
+
 - Write a session summary: `context_write(category="sessions", ...)`
 - Route discoveries to the right category (facts/, decisions/, preferences/)
 
@@ -131,41 +135,45 @@ node dist/index.js --help
 
 ## CLI Commands
 
-| Command | File | Description |
-|---------|------|-------------|
-| `go` | go.ts | One-command setup (global profile + init + analyze + setup) |
-| `wizard` | wizard.ts | Interactive guided setup |
-| `init` | init.ts | Scaffold .context/ |
-| `analyze` | analyze.ts | AI analysis (--dry-run, --merge) |
-| `sync` | sync.ts | Git history sync |
-| `serve` | serve.ts | MCP server |
-| `setup <tool>` | setup.ts | Tool integration (7 tools) |
-| `status` | status.ts | Coverage + freshness |
-| `search <query>` | search.ts | Search knowledge base from terminal (--category, --limit, --detail) |
-| `dashboard` | dashboard.ts | Web UI on localhost:3333 |
-| `hook <action>` | hook.ts | Git hook install/uninstall |
-| `global <action>` | global.ts | Manage global context (list/read/write/delete/export/import) |
+| Command           | File         | Description                                                         |
+| ----------------- | ------------ | ------------------------------------------------------------------- |
+| `go`              | go.ts        | One-command setup (global profile + init + analyze + setup)         |
+| `wizard`          | wizard.ts    | Interactive guided setup                                            |
+| `init`            | init.ts      | Scaffold .context/                                                  |
+| `analyze`         | analyze.ts   | AI analysis (--dry-run, --merge)                                    |
+| `sync`            | sync.ts      | Git history sync                                                    |
+| `serve`           | serve.ts     | MCP server                                                          |
+| `setup <tool>`    | setup.ts     | Tool integration (7 tools)                                          |
+| `status`          | status.ts    | Coverage + freshness                                                |
+| `search <query>`  | search.ts    | Search knowledge base from terminal (--category, --limit, --detail) |
+| `doctor`          | doctor.ts    | Diagnostics, health checks, support bundles                         |
+| `dashboard`       | dashboard.ts | Web UI on localhost:3333                                            |
+| `hook <action>`   | hook.ts      | Git hook install/uninstall                                          |
+| `global <action>` | global.ts    | Manage global context (list/read/write/delete/export/import)        |
 
 ## MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `context_search` | Hybrid FTS5 + vector search across repo + global. Intelligent category routing. Scope filter. |
-| `context_write` | Write/append with scope routing (preferences→global). Auto-purge detection. Supersedes. |
-| `context_delete` | Remove entries. Tries repo first, falls back to global. Scope parameter. |
-| `context_list` | List entries from both stores with [repo]/[global] provenance tags. |
-| `context_read` | Read full content. Repo-first, falls back to global. |
-| `context_auto_orient` | Project orientation: index + global preferences + repo preferences + sessions + recent. |
+| Tool                  | Description                                                                                   |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `context_search`      | Hybrid FTS5 + vector search across repo + global. Intelligent category routing. Scope filter. |
+| `context_write`       | Write/append with scope routing (preferences→global). Auto-purge detection. Supersedes.       |
+| `context_delete`      | Remove entries. Tries repo first, falls back to global. Scope parameter.                      |
+| `context_list`        | List entries from both stores with [repo]/[global] provenance tags.                           |
+| `context_read`        | Read full content. Repo-first, falls back to global.                                          |
+| `context_auto_orient` | Project orientation: index + global preferences + repo preferences + sessions + recent.       |
 
 ## Common Issues
 
 ### "Failed to parse AI response as JSON"
+
 The AI wrapped output in fences or was truncated. The parser in `json-repair.ts` handles most cases. If a new model produces a different format, add a strategy there.
 
 ### "Streaming is required for operations that may take longer than 10 minutes"
+
 Anthropic SDK error. The provider already uses `.stream()`. If you see this, someone switched back to `.create()`.
 
 ### Build produces no shebang
+
 `scripts/build.js` handles this. Check that script if `dist/index.js` doesn't have a shebang.
 
 ## Dependencies
@@ -183,13 +191,40 @@ Anthropic SDK error. The provider already uses `.stream()`. If you see this, som
 
 ## Releasing
 
-Auto-publishing is configured via GitHub Actions. To release a new version:
+Auto-publishing is configured via GitHub Actions. Full release checklist:
 
-1. Bump version in `package.json`
-2. Commit the change
-3. Tag and push: `git tag v1.x.x && git push origin v1.x.x`
+```bash
+# 1. Bump version in package.json
+# 2. Update CHANGELOG.md with new version section
+# 3. Sync server.json (automatic on build, but verify):
+npm run sync:versions
 
-The `release.yml` workflow handles build, test, and `npm publish` with provenance automatically. The `NPM_TOKEN` secret is already configured in the repo.
+# 4. Verify everything passes:
+npm run check:release   # version parity + changelog check
+npm run lint            # typecheck + prettier
+npm test                # all tests
+npm run build           # compile + sync versions
+
+# 5. Commit, push, tag, push tag:
+git add -A && git commit -m "v1.x.x — description"
+git push origin main
+git tag v1.x.x && git push origin v1.x.x
+
+# 6. Wait for GitHub Actions release workflow to complete:
+gh run list --limit 1
+
+# 7. Upgrade locally:
+npm install -g repomemory@latest && repomemory --version
+```
+
+**Important:**
+
+- `server.json` version MUST match `package.json` — `npm run sync:versions` handles this
+- `npm run check:release` validates version parity, changelog entry, and README integrity
+- The `release.yml` workflow runs lint, typecheck, tests, E2E, build, then `npm publish --provenance`
+- If CI fails after tagging, fix the issue, delete the tag (`git tag -d vX && git push origin :refs/tags/vX`), push the fix, then re-tag
+- Never force-push tags — delete and recreate instead
+- The `NPM_TOKEN` secret is configured in the repo
 
 ## Don't
 
@@ -205,3 +240,7 @@ The `release.yml` workflow handles build, test, and `npm publish` with provenanc
 - Don't change scope routing defaults without updating both `resolveScope()` in server.ts AND the design doc
 - Don't store repo-specific data in `~/.repomemory/global/` — it's personal developer preferences only
 - Don't remove backwards compatibility — `enableGlobalContext: false` must make v1.2 behave like v1.1
+- Don't call `process.exit()` in setup functions called programmatically — throw errors instead (go.ts catches them)
+- Don't use `new Date()` for search index timestamps — always use filesystem mtime from `store.listEntries()` to avoid embedding churn
+- Don't add a `categories` config field — categories are hardcoded in `context-store.ts` and `server.ts` (VALID_CATEGORIES). This is intentional.
+- Don't claim Node 18 support — `commander@14` requires Node >=20
