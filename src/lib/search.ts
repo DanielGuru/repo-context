@@ -13,6 +13,18 @@ export interface SearchResult {
   relativePath: string;
 }
 
+export interface SearchExplain {
+  keywordScore: number;
+  semanticScore: number;
+  hybridScore: number;
+  method: "keyword-only" | "semantic-only" | "hybrid";
+  hasEmbedding: boolean;
+}
+
+export interface ExplainedSearchResult extends SearchResult {
+  explain?: SearchExplain;
+}
+
 // sql.js types (loaded dynamically)
 interface SqlJsDatabase {
   run(sql: string, params?: unknown[]): SqlJsDatabase;
@@ -347,7 +359,12 @@ export class SearchIndex {
     this.embeddingCacheDirty = true;
   }
 
-  async search(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
+  async search(
+    query: string,
+    category?: string,
+    limit: number = 10,
+    explain: boolean = false
+  ): Promise<ExplainedSearchResult[]> {
     // Get keyword results
     const keywordResults = this.hasFts5
       ? await this.searchFts5(query, category, limit * 2)
@@ -355,21 +372,61 @@ export class SearchIndex {
 
     // If no embedding provider, return keyword results only
     if (!this.embeddingProvider) {
-      return keywordResults.slice(0, limit);
+      if (!explain) return keywordResults.slice(0, limit);
+      return keywordResults.slice(0, limit).map((r) => ({
+        ...r,
+        explain: {
+          keywordScore: r.score,
+          semanticScore: 0,
+          hybridScore: r.score,
+          method: "keyword-only" as const,
+          hasEmbedding: false,
+        },
+      }));
     }
 
     // Attempt hybrid search
     try {
       const semanticResults = await this.searchSemantic(query, category, limit * 2);
       if (semanticResults.length === 0) {
-        return keywordResults.slice(0, limit);
+        if (!explain) return keywordResults.slice(0, limit);
+        return keywordResults.slice(0, limit).map((r) => ({
+          ...r,
+          explain: {
+            keywordScore: r.score,
+            semanticScore: 0,
+            hybridScore: r.score,
+            method: "keyword-only" as const,
+            hasEmbedding: true,
+          },
+        }));
       }
       if (keywordResults.length === 0) {
-        return semanticResults.slice(0, limit);
+        if (!explain) return semanticResults.slice(0, limit);
+        return semanticResults.slice(0, limit).map((r) => ({
+          ...r,
+          explain: {
+            keywordScore: 0,
+            semanticScore: r.score,
+            hybridScore: r.score,
+            method: "semantic-only" as const,
+            hasEmbedding: true,
+          },
+        }));
       }
-      return this.hybridMerge(keywordResults, semanticResults, query, limit);
+      return this.hybridMerge(keywordResults, semanticResults, query, limit, explain);
     } catch {
-      return keywordResults.slice(0, limit);
+      if (!explain) return keywordResults.slice(0, limit);
+      return keywordResults.slice(0, limit).map((r) => ({
+        ...r,
+        explain: {
+          keywordScore: r.score,
+          semanticScore: 0,
+          hybridScore: r.score,
+          method: "keyword-only" as const,
+          hasEmbedding: false,
+        },
+      }));
     }
   }
 
@@ -565,8 +622,9 @@ export class SearchIndex {
     keywordResults: SearchResult[],
     semanticResults: SearchResult[],
     query: string,
-    limit: number
-  ): SearchResult[] {
+    limit: number,
+    explain: boolean = false
+  ): ExplainedSearchResult[] {
     // Normalize scores to [0, 1] using min-max normalization (handles negative FTS5 scores)
     const keywordScores = keywordResults.map((r) => r.score);
     const minKeyword = keywordScores.length > 0 ? Math.min(...keywordScores) : 0;
@@ -604,10 +662,20 @@ export class SearchIndex {
     }
 
     return Array.from(scoreMap.values())
-      .map(({ keyword, semantic, result }) => ({
-        ...result,
-        score: this.alpha * keyword + (1 - this.alpha) * semantic,
-      }))
+      .map(({ keyword, semantic, result }) => {
+        const hybridScore = this.alpha * keyword + (1 - this.alpha) * semantic;
+        const out: ExplainedSearchResult = { ...result, score: hybridScore };
+        if (explain) {
+          out.explain = {
+            keywordScore: keyword,
+            semanticScore: semantic,
+            hybridScore,
+            method: "hybrid",
+            hasEmbedding: true,
+          };
+        }
+        return out;
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
   }
@@ -657,6 +725,61 @@ export class SearchIndex {
     } catch (e) {
       console.error("Warning: Could not save search index:", e);
     }
+  }
+
+  /** Get index statistics for diagnostics */
+  async getStats(): Promise<{
+    totalDocs: number;
+    embeddedDocs: number;
+    hasFts5: boolean;
+    embeddingProvider: string | null;
+    embeddingDims: number;
+    dbSizeBytes: number;
+  }> {
+    const db = await this.ensureDb();
+    let totalDocs = 0;
+    let embeddedDocs = 0;
+    let embeddingDims = 0;
+
+    try {
+      const total = db.exec("SELECT COUNT(*) FROM documents");
+      if (total.length) totalDocs = total[0].values[0][0] as number;
+    } catch {
+      /* empty */
+    }
+
+    try {
+      const embedded = db.exec("SELECT COUNT(*) FROM documents WHERE embedding IS NOT NULL AND embedding_dims > 0");
+      if (embedded.length) embeddedDocs = embedded[0].values[0][0] as number;
+    } catch {
+      /* empty */
+    }
+
+    try {
+      const dims = db.exec("SELECT embedding_dims FROM documents WHERE embedding_dims > 0 LIMIT 1");
+      if (dims.length && dims[0].values.length) embeddingDims = dims[0].values[0][0] as number;
+    } catch {
+      /* empty */
+    }
+
+    let dbSizeBytes = 0;
+    if (existsSync(this.dbPath)) {
+      try {
+        const { statSync } = await import("fs");
+        dbSizeBytes = statSync(this.dbPath).size;
+      } catch {
+        /* empty */
+      }
+    }
+
+    return {
+      totalDocs,
+      embeddedDocs,
+      hasFts5: this.hasFts5,
+      embeddingProvider: this.embeddingProvider ? "configured" : null,
+      embeddingDims,
+      dbSizeBytes,
+    };
   }
 
   close(): void {

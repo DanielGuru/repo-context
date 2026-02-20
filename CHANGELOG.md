@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0 (2026-02-20)
+
+### New Features
+- **Search explain mode** — `repomemory search --explain` and MCP `context_search(explain=true)` show keyword vs semantic score breakdown for every result. Debug search quality instantly.
+- **Incremental analysis** — `repomemory analyze --incremental` only re-analyzes files changed since last analysis (tracked via git commit hash). Saves time and API costs on large repos.
+- **Doctor embeddings diagnostics** — `repomemory doctor` now shows embedding provider status, vector dimensions, cache stats, and warns when embeddings are misconfigured.
+
 ## 1.7.1 (2026-02-20)
 
 ### Fixes

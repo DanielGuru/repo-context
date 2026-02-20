@@ -1,18 +1,19 @@
 import chalk from "chalk";
 import { loadConfig, resolveGlobalDir } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
-import { SearchIndex } from "../lib/search.js";
+import { SearchIndex, type ExplainedSearchResult } from "../lib/search.js";
 import { createEmbeddingProvider } from "../lib/embeddings.js";
 
 export async function searchCommand(
   query: string,
-  options: { dir?: string; category?: string; limit?: string; detail?: string }
+  options: { dir?: string; category?: string; limit?: string; detail?: string; explain?: boolean }
 ) {
   const repoRoot = options.dir || process.cwd();
   const config = loadConfig(repoRoot);
   const store = new ContextStore(repoRoot, config);
   const limit = parseInt(options.limit || "10", 10);
   const detail = options.detail || "compact";
+  const explain = Boolean(options.explain);
 
   if (!store.exists()) {
     console.error(chalk.red("\u2717 No .context/ directory found."));
@@ -52,19 +53,12 @@ export async function searchCommand(
   }
 
   // Search
-  const repoResults = await searchIndex.search(query, options.category, limit);
-  const globalResults = globalIndex ? await globalIndex.search(query, options.category, limit) : [];
+  const repoResults = await searchIndex.search(query, options.category, limit, explain);
+  const globalResults = globalIndex ? await globalIndex.search(query, options.category, limit, explain) : [];
 
   // Merge with repo-first dedup
   const seen = new Set<string>();
-  type TaggedResult = {
-    category: string;
-    filename: string;
-    title: string;
-    snippet: string;
-    score: number;
-    source: string;
-  };
+  type TaggedResult = ExplainedSearchResult & { source: string };
   const merged: TaggedResult[] = [];
 
   for (const r of repoResults) {
@@ -99,6 +93,14 @@ export async function searchCommand(
     if (detail === "full") {
       console.log(`${path}${sourceTag} ${score}`);
       console.log(chalk.bold(`  ${r.title}`));
+      if (explain && r.explain) {
+        const e = r.explain;
+        console.log(
+          chalk.dim(
+            `  [${e.method}] keyword=${e.keywordScore.toFixed(3)} semantic=${e.semanticScore.toFixed(3)} hybrid=${e.hybridScore.toFixed(3)}`
+          )
+        );
+      }
       console.log(chalk.dim("  " + "\u2500".repeat(60)));
       const lines = r.snippet.split("\n").slice(0, 15);
       for (const line of lines) {
@@ -108,6 +110,10 @@ export async function searchCommand(
     } else {
       const snippet = r.snippet.replace(/\n/g, " ").slice(0, 120);
       console.log(`  ${path}${sourceTag} ${score}`);
+      if (explain && r.explain) {
+        const e = r.explain;
+        console.log(chalk.dim(`    [${e.method}] kw=${e.keywordScore.toFixed(2)} sem=${e.semanticScore.toFixed(2)}`));
+      }
       console.log(`    ${chalk.bold(r.title)} \u2014 ${chalk.dim(snippet)}`);
     }
   }

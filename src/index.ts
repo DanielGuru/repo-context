@@ -50,6 +50,7 @@ program
   .option("-v, --verbose", "Show detailed output", false)
   .option("--dry-run", "Show what would be analyzed without calling the AI", false)
   .option("--merge", "Merge with existing context (don't overwrite manual edits)", false)
+  .option("--incremental", "Only re-analyze files changed since last analysis", false)
   .action(analyzeCommand);
 
 program
@@ -84,6 +85,7 @@ program
   .option("-c, --category <category>", "Filter by category (facts, decisions, regressions, etc.)")
   .option("-l, --limit <n>", "Max results to return", "10")
   .option("--detail <level>", "Output detail: compact or full", "compact")
+  .option("--explain", "Show keyword vs semantic score breakdown", false)
   .action(searchCommand);
 
 program

@@ -165,16 +165,52 @@ export async function doctorCommand(options: { dir?: string; json?: boolean; out
     }
 
     try {
-      const index = new SearchIndex(store.path, store);
+      const { createEmbeddingProvider } = await import("../lib/embeddings.js");
+      let embeddingProvider = null;
+      try {
+        embeddingProvider = await createEmbeddingProvider({
+          provider: config.embeddingProvider,
+          model: config.embeddingModel,
+          apiKey: config.embeddingApiKey,
+        });
+      } catch {
+        // Keyword-only
+      }
+
+      const index = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
       await index.rebuild();
       const probe = await index.search("architecture", undefined, 1);
+      const stats = await index.getStats();
       index.close();
+
       add(checks, {
         id: "search-db",
         status: "pass",
         message: "Search index is healthy",
-        detail: `Probe query executed (${probe.length} result${probe.length === 1 ? "" : "s"})`,
+        detail: `${stats.totalDocs} docs, ${stats.embeddedDocs} with embeddings, FTS5=${stats.hasFts5}, dims=${stats.embeddingDims}, db=${(stats.dbSizeBytes / 1024).toFixed(0)}KB`,
       });
+
+      if (embeddingProvider && stats.embeddedDocs === 0 && stats.totalDocs > 0) {
+        add(checks, {
+          id: "embeddings",
+          status: "warn",
+          message: "Embedding provider configured but no entries have embeddings",
+          detail: "Run `repomemory analyze` to populate embeddings for semantic search.",
+        });
+      } else if (embeddingProvider && stats.embeddedDocs > 0) {
+        add(checks, {
+          id: "embeddings",
+          status: "pass",
+          message: `Semantic search active (${stats.embeddedDocs}/${stats.totalDocs} entries embedded, ${stats.embeddingDims}d vectors)`,
+        });
+      } else if (!embeddingProvider) {
+        add(checks, {
+          id: "embeddings",
+          status: "warn",
+          message: "No embedding provider — using keyword search only",
+          detail: "Set OPENAI_API_KEY or GEMINI_API_KEY to enable semantic search.",
+        });
+      }
     } catch (err) {
       add(checks, {
         id: "search-db",

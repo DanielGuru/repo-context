@@ -178,3 +178,16 @@ export function getRecentDiffs(repoRoot: string, count: number): string {
 export function getLastCommitHash(repoRoot: string): string {
   return git(["rev-parse", "HEAD"], repoRoot);
 }
+
+/** Get list of files changed since a given commit hash */
+export function getChangedFilesSince(repoRoot: string, sinceHash: string): string[] {
+  try {
+    const output = git(["diff", "--name-only", sinceHash, "HEAD"], repoRoot);
+    return output
+      .split("\n")
+      .map((f) => f.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}

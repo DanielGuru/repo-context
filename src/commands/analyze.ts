@@ -1,11 +1,12 @@
 import chalk from "chalk";
 import { join } from "path";
+import { readFileSync, writeFileSync } from "fs";
 import { loadConfig } from "../lib/config.js";
 import type { Provider } from "../lib/config.js";
 import { ContextStore } from "../lib/context-store.js";
 import { SearchIndex } from "../lib/search.js";
 import { scanRepo } from "../lib/repo-scanner.js";
-import { getGitInfo, getRecentDiffs } from "../lib/git.js";
+import { getGitInfo, getRecentDiffs, getChangedFilesSince, getLastCommitHash } from "../lib/git.js";
 import { createProvider, validateApiKey, estimateCost, AIError } from "../lib/ai-provider.js";
 import { extractJSON } from "../lib/json-repair.js";
 
@@ -144,6 +145,7 @@ export async function analyzeCommand(options: {
   verbose?: boolean;
   dryRun?: boolean;
   merge?: boolean;
+  incremental?: boolean;
 }) {
   const repoRoot = options.dir || process.cwd();
   const config = loadConfig(repoRoot);
@@ -179,9 +181,38 @@ export async function analyzeCommand(options: {
     console.log(chalk.dim(`  Merge mode: ${existingEntries.length} existing entries will be preserved.`));
   }
 
+  // Incremental mode: track last analysis commit hash
+  const lastAnalysisPath = join(repoRoot, config.contextDir, ".last-analysis-hash");
+  let changedFiles: Set<string> | null = null;
+
+  if (options.incremental) {
+    try {
+      const lastHash = readFileSync(lastAnalysisPath, "utf-8").trim();
+      const changed = getChangedFilesSince(repoRoot, lastHash);
+      if (changed.length === 0) {
+        console.log(chalk.green("\n\u2713 No files changed since last analysis. Nothing to do.\n"));
+        return;
+      }
+      changedFiles = new Set(changed);
+      console.log(
+        chalk.bold(
+          `\n\ud83d\udd04 Incremental analysis: ${changed.length} file${changed.length === 1 ? "" : "s"} changed since last analysis\n`
+        )
+      );
+    } catch {
+      console.log(chalk.dim("  No previous analysis hash found. Running full analysis."));
+    }
+  }
+
   console.log(chalk.bold("\n\ud83d\udd0d Scanning repository...\n"));
 
   const scan = scanRepo(repoRoot, config);
+
+  // In incremental mode, filter key files to only those that changed
+  if (changedFiles) {
+    scan.keyFiles = scan.keyFiles.filter((f) => changedFiles!.has(f.path));
+    console.log(chalk.dim(`  Filtered to ${scan.keyFiles.length} changed key files`));
+  }
   console.log(`  ${chalk.cyan("Files:")} ${scan.stats.totalFiles}`);
   console.log(`  ${chalk.cyan("Directories:")} ${scan.stats.totalDirs}`);
   console.log(
@@ -370,6 +401,16 @@ export async function analyzeCommand(options: {
     }
     const path = store.writeEntry("preferences", preference.filename, preference.content);
     console.log(`  ${chalk.green("\u2713")} ${path}`);
+  }
+
+  // Save analysis commit hash for incremental mode
+  try {
+    const currentHash = getLastCommitHash(repoRoot);
+    if (currentHash) {
+      writeFileSync(lastAnalysisPath, currentHash + "\n");
+    }
+  } catch {
+    // Not a git repo or no commits — skip
   }
 
   // Build search index

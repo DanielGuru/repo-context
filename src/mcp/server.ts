@@ -10,7 +10,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { ContextStore } from "../lib/context-store.js";
 import type { ContextEntry } from "../lib/context-store.js";
-import { SearchIndex } from "../lib/search.js";
+import { SearchIndex, type SearchExplain } from "../lib/search.js";
 import { createEmbeddingProvider } from "../lib/embeddings.js";
 import type { RepoContextConfig } from "../lib/config.js";
 import { resolveGlobalDir } from "../lib/config.js";
@@ -290,6 +290,11 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
                 enum: ["repo", "global"],
                 description: "Optional: search only repo or only global context. Omit to search both.",
               },
+              explain: {
+                type: "boolean",
+                description:
+                  "Optional: include score breakdown (keyword vs semantic vs hybrid) in results. Useful for debugging search quality.",
+              },
             },
             required: ["query"],
           },
@@ -486,12 +491,14 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
           limit = 5,
           detail = "compact",
           scope: explicitScope,
+          explain: wantExplain = false,
         } = args as {
           query: string;
           category?: string;
           limit?: number;
           detail?: "compact" | "full";
           scope?: "repo" | "global";
+          explain?: boolean;
         };
 
         session.searchQueries.push(query);
@@ -568,15 +575,16 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
           score: number;
           relativePath: string;
           source: string;
+          explain?: SearchExplain;
         };
         let repoResults: TaggedResult[] = [];
         if ((!explicitScope || explicitScope === "repo") && searchIndex) {
-          const raw = await searchIndex.search(query, effectiveCategory, limit);
+          const raw = await searchIndex.search(query, effectiveCategory, limit, wantExplain);
           repoResults = raw.map((r) => ({ ...r, source: "repo" }));
 
           // If routing returned 0, retry without category filter
           if (repoResults.length === 0 && effectiveCategory && !category) {
-            const retry = await searchIndex.search(query, undefined, limit);
+            const retry = await searchIndex.search(query, undefined, limit, wantExplain);
             repoResults = retry.map((r) => ({ ...r, source: "repo" }));
             routingNote = "";
           }
@@ -585,11 +593,11 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
         // Search global
         let globalResults: TaggedResult[] = [];
         if ((!explicitScope || explicitScope === "global") && globalSearchIndex) {
-          const raw = await globalSearchIndex.search(query, effectiveCategory, limit);
+          const raw = await globalSearchIndex.search(query, effectiveCategory, limit, wantExplain);
           globalResults = raw.map((r) => ({ ...r, source: "global" }));
 
           if (globalResults.length === 0 && effectiveCategory && !category) {
-            const retry = await globalSearchIndex.search(query, undefined, limit);
+            const retry = await globalSearchIndex.search(query, undefined, limit, wantExplain);
             globalResults = retry.map((r) => ({ ...r, source: "global" }));
           }
         }
@@ -685,6 +693,11 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
 
         // Format search results with source tags when global is active
         const sourceTag = (s: string) => (globalStore ? ` \u2014 ${s}` : "");
+        const explainTag = (r: (typeof results)[0]) => {
+          if (!wantExplain || !r.explain) return "";
+          const e = r.explain;
+          return ` [${e.method}: kw=${e.keywordScore.toFixed(2)} sem=${e.semanticScore.toFixed(2)}]`;
+        };
         let text: string;
         if (detail === "compact") {
           text =
@@ -692,7 +705,7 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
             results
               .map(
                 (r) =>
-                  `- **${r.title}** [${r.category}/${r.filename}${sourceTag(r.source)}] (score: ${r.score.toFixed(2)}) \u2014 ${r.snippet.slice(0, 150).replace(/\n/g, " ")}...`
+                  `- **${r.title}** [${r.category}/${r.filename}${sourceTag(r.source)}] (score: ${r.score.toFixed(2)})${explainTag(r)} \u2014 ${r.snippet.slice(0, 150).replace(/\n/g, " ")}...`
               )
               .join("\n");
         } else {
@@ -701,7 +714,7 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
             results
               .map(
                 (r) =>
-                  `## ${r.category}/${r.filename}${sourceTag(r.source)} (relevance: ${r.score.toFixed(2)})\n**${r.title}**\n\n${r.snippet}\n`
+                  `## ${r.category}/${r.filename}${sourceTag(r.source)} (relevance: ${r.score.toFixed(2)})${explainTag(r)}\n**${r.title}**\n\n${r.snippet}\n`
               )
               .join("\n---\n\n");
         }
