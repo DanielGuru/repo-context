@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.1 (2026-02-20)
+
+### Fixes
+- **Timestamp normalization** — truncate mtime to second precision in search index to prevent filesystem granularity mismatches causing unnecessary re-embedding
+- **Embedding truncation visibility** — long content truncated for embedding API now logged with `REPOMEMORY_DEBUG=1`; configurable `maxEmbeddingChars` in SearchIndex constructor
+- **Hybrid score clamping** — normalized keyword/semantic scores clamped to [0, 1] to prevent FTS5 rank edge cases from producing weird merge results
+
 ## 1.8.0 (2026-02-20)
 
 ### New Features

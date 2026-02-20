@@ -2,12 +2,12 @@
   "$schema": "https://registry.modelcontextprotocol.io/schema/server.json",
   "name": "io.github.DanielGuru/repomemory",
   "description": "Persistent, structured memory for AI coding agents. Hybrid keyword + semantic search, auto-session capture, intelligent category routing. Your codebase never forgets.",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "packages": [
     {
       "registry": "npm",
       "name": "repomemory",
-      "version": "1.8.0",
+      "version": "1.8.1",
       "runtime": "node",
       "args": [
         "dist/index.js",

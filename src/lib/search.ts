@@ -63,6 +63,9 @@ interface CachedEmbedding {
   embedding: Float32Array;
 }
 
+// Max characters sent to embedding API. Content beyond this is silently truncated.
+const DEFAULT_MAX_EMBEDDING_CHARS = 8000;
+
 export class SearchIndex {
   private db: SqlJsDatabase | null = null;
   private initPromise: Promise<SqlJsDatabase> | null = null;
@@ -72,17 +75,25 @@ export class SearchIndex {
   private hasFts5 = false;
   private embeddingProvider: EmbeddingProvider | null;
   private alpha: number;
+  private maxEmbeddingChars: number;
 
   // In-memory embedding cache — avoids re-fetching from SQLite on every semantic query.
   // Invalidated whenever an entry is added, updated, or removed.
   private embeddingCache: CachedEmbedding[] | null = null;
   private embeddingCacheDirty = true;
 
-  constructor(contextDir: string, store: ContextStore, embeddingProvider?: EmbeddingProvider | null, alpha?: number) {
+  constructor(
+    contextDir: string,
+    store: ContextStore,
+    embeddingProvider?: EmbeddingProvider | null,
+    alpha?: number,
+    maxEmbeddingChars?: number
+  ) {
     this.dbPath = join(contextDir, ".search.db");
     this.store = store;
     this.embeddingProvider = embeddingProvider ?? null;
     this.alpha = alpha ?? 0.5;
+    this.maxEmbeddingChars = maxEmbeddingChars ?? DEFAULT_MAX_EMBEDDING_CHARS;
   }
 
   private async ensureDb(): Promise<SqlJsDatabase> {
@@ -234,7 +245,8 @@ export class SearchIndex {
       currentKeys.add(key);
 
       const existingTimestamp = existingMap.get(key);
-      const entryTimestamp = entry.lastModified.toISOString();
+      // Normalize to second precision to avoid filesystem mtime granularity mismatches
+      const entryTimestamp = new Date(Math.floor(entry.lastModified.getTime() / 1000) * 1000).toISOString();
 
       // Skip if unchanged — preserves existing embeddings
       if (existingTimestamp === entryTimestamp) continue;
@@ -292,7 +304,13 @@ export class SearchIndex {
       const texts = batch.map((m) => {
         const entry = entries.find((e) => e.category === m.category && e.filename === m.filename);
         if (!entry) return "";
-        return `${entry.title}\n\n${entry.content}`.slice(0, 8000);
+        const full = `${entry.title}\n\n${entry.content}`;
+        if (full.length > this.maxEmbeddingChars && process.env.REPOMEMORY_DEBUG) {
+          console.error(
+            `[debug] Embedding truncated: ${m.category}/${m.filename} (${full.length} chars → ${this.maxEmbeddingChars})`
+          );
+        }
+        return full.slice(0, this.maxEmbeddingChars);
       });
 
       try {
@@ -324,7 +342,13 @@ export class SearchIndex {
 
     if (this.embeddingProvider) {
       try {
-        const textToEmbed = `${entry.title}\n\n${entry.content}`.slice(0, 8000);
+        const fullText = `${entry.title}\n\n${entry.content}`;
+        if (fullText.length > this.maxEmbeddingChars && process.env.REPOMEMORY_DEBUG) {
+          console.error(
+            `[debug] Embedding truncated: ${entry.category}/${entry.filename} (${fullText.length} chars → ${this.maxEmbeddingChars})`
+          );
+        }
+        const textToEmbed = fullText.slice(0, this.maxEmbeddingChars);
         const [embedding] = await this.embeddingProvider.embed([textToEmbed]);
         embeddingBlob = new Uint8Array(embedding.buffer, embedding.byteOffset, embedding.byteLength);
         dims = this.embeddingProvider.dimensions;
@@ -342,7 +366,7 @@ export class SearchIndex {
         entry.title,
         entry.content,
         entry.relativePath,
-        entry.lastModified.toISOString(),
+        new Date(Math.floor(entry.lastModified.getTime() / 1000) * 1000).toISOString(),
         embeddingBlob,
         dims,
       ]
@@ -638,10 +662,13 @@ export class SearchIndex {
 
     const scoreMap = new Map<string, { keyword: number; semantic: number; result: SearchResult }>();
 
+    // Clamp normalized scores to [0, 1] to handle FTS5 rank edge cases
+    const clamp = (v: number) => Math.max(0, Math.min(1, v));
+
     for (const r of keywordResults) {
       const key = `${r.category}/${r.filename}`;
       scoreMap.set(key, {
-        keyword: (r.score - minKeyword) / keywordRange,
+        keyword: clamp((r.score - minKeyword) / keywordRange),
         semantic: 0,
         result: r,
       });
@@ -651,11 +678,11 @@ export class SearchIndex {
       const key = `${r.category}/${r.filename}`;
       const existing = scoreMap.get(key);
       if (existing) {
-        existing.semantic = (r.score - minSemantic) / semanticRange;
+        existing.semantic = clamp((r.score - minSemantic) / semanticRange);
       } else {
         scoreMap.set(key, {
           keyword: 0,
-          semantic: (r.score - minSemantic) / semanticRange,
+          semantic: clamp((r.score - minSemantic) / semanticRange),
           result: r,
         });
       }
