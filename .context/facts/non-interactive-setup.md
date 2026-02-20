@@ -1,0 +1,26 @@
+# Non-Interactive Setup
+
+Both `go` and `wizard` support deterministic, non-interactive execution for CI and scripting.
+
+## Flags
+- `--yes` / `--defaults` — use defaults, skip all prompts
+- `--no-prompt` — fail instead of prompting (implied by `--yes`)
+- `--provider <provider>` — explicit provider selection
+- `--embedding-provider <provider>` — explicit embedding choice (including `none`)
+- `--max-files <n>` — max files for analysis
+- `--skip-analyze` — skip the AI analysis step
+- `--tools <list>` — comma-separated tools (wizard only)
+
+## TTY detection
+`interactive = process.stdin.isTTY && process.stdout.isTTY && !noPrompt`
+
+When non-interactive, prompts are bypassed with sensible defaults:
+- Provider: first detected key, fallback to anthropic
+- Embeddings: first available provider
+- Max files: config default (80)
+- Tools: claude only (wizard)
+
+## Example
+```bash
+npx repomemory go --yes --provider anthropic --embedding-provider none --max-files 80 --skip-analyze
+```
