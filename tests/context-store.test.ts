@@ -82,10 +82,7 @@ describe("ContextStore", () => {
     });
 
     it("respects custom contextDir", () => {
-      const customStore = new ContextStore(
-        tempDir,
-        makeConfig({ contextDir: ".my-context" })
-      );
+      const customStore = new ContextStore(tempDir, makeConfig({ contextDir: ".my-context" }));
       expect(customStore.path).toBe(join(tempDir, ".my-context"));
     });
   });
@@ -100,9 +97,7 @@ describe("ContextStore", () => {
 
       const filePath = join(tempDir, ".context", "facts", "architecture.md");
       expect(existsSync(filePath)).toBe(true);
-      expect(readFileSync(filePath, "utf-8")).toBe(
-        "# Architecture\nDetails here."
-      );
+      expect(readFileSync(filePath, "utf-8")).toBe("# Architecture\nDetails here.");
     });
 
     it("sanitizes filenames (lowercase, remove special chars)", () => {
@@ -134,24 +129,13 @@ describe("ContextStore", () => {
     });
 
     it("validates categories and throws on invalid category", () => {
-      expect(() =>
-        store.writeEntry("invalid-category", "test", "content")
-      ).toThrow(/Invalid category/);
+      expect(() => store.writeEntry("invalid-category", "test", "content")).toThrow(/Invalid category/);
     });
 
     it("accepts all valid categories", () => {
-      const validCategories = [
-        "facts",
-        "decisions",
-        "regressions",
-        "sessions",
-        "changelog",
-        "preferences",
-      ];
+      const validCategories = ["facts", "decisions", "regressions", "sessions", "changelog", "preferences"];
       for (const cat of validCategories) {
-        expect(() =>
-          store.writeEntry(cat, `test-${cat}`, "content")
-        ).not.toThrow();
+        expect(() => store.writeEntry(cat, `test-${cat}`, "content")).not.toThrow();
       }
     });
 
@@ -159,32 +143,19 @@ describe("ContextStore", () => {
       store.writeEntry("facts", "overwrite-test", "original");
       store.writeEntry("facts", "overwrite-test", "updated");
 
-      const content = readFileSync(
-        join(tempDir, ".context", "facts", "overwrite-test.md"),
-        "utf-8"
-      );
+      const content = readFileSync(join(tempDir, ".context", "facts", "overwrite-test.md"), "utf-8");
       expect(content).toBe("updated");
     });
 
     it("collapses consecutive hyphens in sanitized filenames", () => {
       store.writeEntry("facts", "name---with---hyphens", "content");
-      const filePath = join(
-        tempDir,
-        ".context",
-        "facts",
-        "name-with-hyphens.md"
-      );
+      const filePath = join(tempDir, ".context", "facts", "name-with-hyphens.md");
       expect(existsSync(filePath)).toBe(true);
     });
 
     it("strips leading hyphens from sanitized filenames", () => {
       store.writeEntry("facts", "---leading", "content");
-      const filePath = join(
-        tempDir,
-        ".context",
-        "facts",
-        "leading.md"
-      );
+      const filePath = join(tempDir, ".context", "facts", "leading.md");
       expect(existsSync(filePath)).toBe(true);
     });
 
@@ -253,9 +224,7 @@ describe("ContextStore", () => {
       store.writeEntry("facts", "to-delete", "content");
       const result = store.deleteEntry("facts", "to-delete");
       expect(result).toBe(true);
-      expect(
-        existsSync(join(tempDir, ".context", "facts", "to-delete.md"))
-      ).toBe(false);
+      expect(existsSync(join(tempDir, ".context", "facts", "to-delete.md"))).toBe(false);
     });
 
     it("returns false for a non-existent file", () => {
@@ -275,12 +244,7 @@ describe("ContextStore", () => {
 
     it("creates a new file if it does not exist", () => {
       store.appendEntry("sessions", "new-session", "Session content.");
-      const filePath = join(
-        tempDir,
-        ".context",
-        "sessions",
-        "new-session.md"
-      );
+      const filePath = join(tempDir, ".context", "sessions", "new-session.md");
       expect(existsSync(filePath)).toBe(true);
       const content = readFileSync(filePath, "utf-8");
       expect(content).toContain("Session content.");
@@ -290,10 +254,7 @@ describe("ContextStore", () => {
       store.writeEntry("sessions", "append-test", "First part.");
       store.appendEntry("sessions", "append-test", "Second part.");
 
-      const content = readFileSync(
-        join(tempDir, ".context", "sessions", "append-test.md"),
-        "utf-8"
-      );
+      const content = readFileSync(join(tempDir, ".context", "sessions", "append-test.md"), "utf-8");
       expect(content).toContain("First part.");
       expect(content).toContain("Second part.");
     });
@@ -302,27 +263,17 @@ describe("ContextStore", () => {
       store.writeEntry("sessions", "sep-test", "A");
       store.appendEntry("sessions", "sep-test", "B");
 
-      const content = readFileSync(
-        join(tempDir, ".context", "sessions", "sep-test.md"),
-        "utf-8"
-      );
+      const content = readFileSync(join(tempDir, ".context", "sessions", "sep-test.md"), "utf-8");
       expect(content).toBe("A\n\nB");
     });
 
     it("validates category", () => {
-      expect(() =>
-        store.appendEntry("bad-cat", "test", "content")
-      ).toThrow(/Invalid category/);
+      expect(() => store.appendEntry("bad-cat", "test", "content")).toThrow(/Invalid category/);
     });
 
     it("does not prepend blank lines on new files", () => {
       store.appendEntry("sessions", "no-blanks", "First content.");
-      const filePath = join(
-        tempDir,
-        ".context",
-        "sessions",
-        "no-blanks.md"
-      );
+      const filePath = join(tempDir, ".context", "sessions", "no-blanks.md");
       const content = readFileSync(filePath, "utf-8");
       expect(content).toBe("First content.");
       expect(content.startsWith("\n")).toBe(false);
@@ -373,9 +324,7 @@ describe("ContextStore", () => {
       store.writeEntry("facts", "test", "content");
 
       const entries = store.listEntries();
-      const indexEntry = entries.find(
-        (e) => e.category === "root" && e.filename === "index.md"
-      );
+      const indexEntry = entries.find((e) => e.category === "root" && e.filename === "index.md");
       expect(indexEntry).toBeDefined();
       expect(indexEntry!.title).toBe("Index");
     });
@@ -425,18 +374,13 @@ describe("ContextStore", () => {
       store.writeEntry("facts", "pathed", "content");
 
       const entries = store.listEntries("facts");
-      expect(entries[0].relativePath).toBe(
-        join(".context", "facts", "pathed.md")
-      );
+      expect(entries[0].relativePath).toBe(join(".context", "facts", "pathed.md"));
     });
 
     it("skips hidden files (dotfiles)", () => {
       store.writeEntry("facts", "visible", "content");
       // Manually create a hidden file
-      writeFileSync(
-        join(tempDir, ".context", "facts", ".hidden.md"),
-        "hidden"
-      );
+      writeFileSync(join(tempDir, ".context", "facts", ".hidden.md"), "hidden");
 
       const entries = store.listEntries("facts");
       expect(entries).toHaveLength(1);

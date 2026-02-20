@@ -53,13 +53,41 @@ const LANGUAGE_MAP: Record<string, string> = {
 const ALLOWED_DOTDIRS = new Set([".github", ".vscode", ".cursor"]);
 
 const BINARY_EXTENSIONS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".webp", ".avif",
-  ".woff", ".woff2", ".ttf", ".eot", ".otf",
-  ".mp3", ".mp4", ".wav", ".webm", ".ogg",
-  ".zip", ".tar", ".gz", ".bz2", ".7z", ".rar",
-  ".pdf", ".doc", ".docx", ".xls", ".xlsx",
-  ".exe", ".dll", ".so", ".dylib",
-  ".sqlite", ".db",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".ico",
+  ".svg",
+  ".webp",
+  ".avif",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".otf",
+  ".mp3",
+  ".mp4",
+  ".wav",
+  ".webm",
+  ".ogg",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".bz2",
+  ".7z",
+  ".rar",
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".sqlite",
+  ".db",
   ".wasm",
 ]);
 
@@ -103,27 +131,20 @@ function matchesKeyPattern(relativePath: string, patterns: string[]): boolean {
     if (pattern.includes("**/")) {
       const suffix = pattern.replace("**/", "");
       if (suffix.includes("*")) {
-        const regex = new RegExp(
-          suffix.replace(/\./g, "\\.").replace(/\*/g, "[^/]*").replace(/\?/g, ".")
-        );
+        const regex = new RegExp(suffix.replace(/\./g, "\\.").replace(/\*/g, "[^/]*").replace(/\?/g, "."));
         return regex.test(name);
       }
       return relativePath.endsWith(suffix) || name === suffix;
     }
     if (pattern.includes("*")) {
-      const regex = new RegExp(
-        "^" + pattern.replace(/\./g, "\\.").replace(/\*/g, "[^/]*").replace(/\?/g, ".") + "$"
-      );
+      const regex = new RegExp("^" + pattern.replace(/\./g, "\\.").replace(/\*/g, "[^/]*").replace(/\?/g, ".") + "$");
       return regex.test(name);
     }
     return name === pattern || relativePath === pattern;
   });
 }
 
-export function scanRepo(
-  root: string,
-  config: RepoContextConfig
-): RepoScan {
+export function scanRepo(root: string, config: RepoContextConfig): RepoScan {
   const allFiles: RepoFile[] = [];
   const treeLines: string[] = [];
   const languages: Record<string, number> = {};
@@ -166,8 +187,7 @@ export function scanRepo(
         } else {
           const ext = extname(entry).toLowerCase();
           if (LANGUAGE_MAP[ext]) {
-            languages[LANGUAGE_MAP[ext]] =
-              (languages[LANGUAGE_MAP[ext]] || 0) + 1;
+            languages[LANGUAGE_MAP[ext]] = (languages[LANGUAGE_MAP[ext]] || 0) + 1;
           }
 
           if (depth <= 3) {

@@ -25,6 +25,28 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
     // Search will fall back to client-side filtering
   }
 
+  const computeRevision = (entries: ReturnType<ContextStore["listEntries"]>): string => {
+    let newest = 0;
+    let total = 0;
+    for (const entry of entries) {
+      const ts = entry.lastModified.getTime();
+      if (ts > newest) newest = ts;
+      total += entry.sizeBytes;
+    }
+    return `${entries.length}:${newest}:${total}`;
+  };
+
+  const serializeEntries = (entries: ReturnType<ContextStore["listEntries"]>, compact = false) =>
+    entries.map((e) => ({
+      category: e.category,
+      filename: e.filename,
+      title: e.title,
+      content: compact ? undefined : e.content,
+      relativePath: e.relativePath,
+      lastModified: e.lastModified.toISOString(),
+      sizeBytes: e.sizeBytes,
+    }));
+
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || "/", `http://localhost:${port}`);
 
@@ -84,17 +106,52 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
       }
 
       const category = url.searchParams.get("category") || undefined;
+      const limit = Math.max(1, Math.min(parseInt(url.searchParams.get("limit") || "200", 10), 2000));
+      const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10));
+      const compact = url.searchParams.get("compact") === "1";
+      const onlyMeta = url.searchParams.get("meta") === "1";
+
       const entries = store.listEntries(category);
-      res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": allowedOrigin });
-      res.end(JSON.stringify(entries.map((e) => ({
-        category: e.category,
-        filename: e.filename,
-        title: e.title,
-        content: e.content,
-        relativePath: e.relativePath,
-        lastModified: e.lastModified.toISOString(),
-        sizeBytes: e.sizeBytes,
-      }))));
+      const revision = computeRevision(entries);
+      const etag = `W/"${revision}"`;
+
+      if (req.headers["if-none-match"] === etag) {
+        res.writeHead(304, { ETag: etag, "Access-Control-Allow-Origin": allowedOrigin });
+        res.end();
+        return;
+      }
+
+      if (onlyMeta) {
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": allowedOrigin,
+          ETag: etag,
+        });
+        res.end(
+          JSON.stringify({
+            revision,
+            total: entries.length,
+            newest: entries.reduce((acc, e) => Math.max(acc, e.lastModified.getTime()), 0),
+          })
+        );
+        return;
+      }
+
+      const page = entries.slice(offset, offset + limit);
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": allowedOrigin,
+        ETag: etag,
+      });
+      res.end(
+        JSON.stringify({
+          revision,
+          total: entries.length,
+          offset,
+          limit,
+          entries: serializeEntries(page, compact),
+        })
+      );
       return;
     }
 
@@ -162,12 +219,21 @@ export async function dashboardCommand(options: { dir?: string; port?: string })
   });
 
   // Graceful shutdown
-  process.on("SIGTERM", () => { if (searchIndex) searchIndex.close(); server.close(); process.exit(0); });
-  process.on("SIGINT", () => { if (searchIndex) searchIndex.close(); server.close(); process.exit(0); });
+  process.on("SIGTERM", () => {
+    if (searchIndex) searchIndex.close();
+    server.close();
+    process.exit(0);
+  });
+  process.on("SIGINT", () => {
+    if (searchIndex) searchIndex.close();
+    server.close();
+    process.exit(0);
+  });
 }
 
 function buildDashboardHTML(provider: string, model: string): string {
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const esc = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -565,13 +631,54 @@ let allEntries = [];
 let currentCategory = null;
 let editingEntry = null;
 let searchDebounce = null;
+let entriesRevision = null;
+let entriesETag = null;
 
-async function init() {
-  const [entries, stats] = await Promise.all([
-    fetch('/api/entries').then(r => r.json()),
+async function fetchEntriesPage(offset = 0, limit = 500, compact = false) {
+  const resp = await fetch('/api/entries?offset=' + offset + '&limit=' + limit + (compact ? '&compact=1' : ''), {
+    headers: entriesETag ? { 'If-None-Match': entriesETag } : {}
+  });
+
+  if (resp.status === 304) return null;
+
+  if (!resp.ok) {
+    throw new Error('Failed to fetch entries: ' + resp.status);
+  }
+
+  const etag = resp.headers.get('etag');
+  if (etag) entriesETag = etag;
+  return resp.json();
+}
+
+async function fetchAllEntries(compact = false) {
+  const first = await fetchEntriesPage(0, 500, compact);
+  if (!first) return null;
+
+  let merged = first.entries || [];
+  let offset = first.offset + first.entries.length;
+
+  while (offset < first.total) {
+    const next = await fetch('/api/entries?offset=' + offset + '&limit=500' + (compact ? '&compact=1' : '')).then(r => r.json());
+    merged = merged.concat(next.entries || []);
+    offset += (next.entries || []).length;
+  }
+
+  return {
+    revision: first.revision,
+    entries: merged,
+  };
+}
+
+async function init(force = false) {
+  const [entriesResp, stats] = await Promise.all([
+    fetchAllEntries(false),
     fetch('/api/stats').then(r => r.json()),
   ]);
-  allEntries = entries;
+
+  if (entriesResp && (force || entriesResp.revision !== entriesRevision)) {
+    entriesRevision = entriesResp.revision;
+    allEntries = entriesResp.entries;
+  }
 
   // Stats
   const row = document.getElementById('statsRow');
@@ -604,7 +711,8 @@ function filterCategory(cat, btn) {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const filtered = allEntries.filter(e => {
     if (cat && e.category !== cat) return false;
-    if (q && !e.title.toLowerCase().includes(q) && !e.content.toLowerCase().includes(q) && !e.filename.toLowerCase().includes(q)) return false;
+    const body = (e.content || '').toLowerCase();
+    if (q && !e.title.toLowerCase().includes(q) && !body.includes(q) && !e.filename.toLowerCase().includes(q)) return false;
     return true;
   });
   renderEntries(filtered);
@@ -697,7 +805,7 @@ async function saveEdit() {
     editingEntry.content = content;
     document.getElementById('detailContent').innerHTML = renderMarkdown(content);
     toggleEdit();
-    init(); // Refresh all entries
+    await init(true); // Refresh all entries
   } catch (e) {
     alert('Failed to save: ' + e.message);
   }
@@ -707,7 +815,8 @@ function getFilteredEntries() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   return allEntries.filter(e => {
     if (currentCategory && e.category !== currentCategory) return false;
-    if (q && !e.title.toLowerCase().includes(q) && !e.content.toLowerCase().includes(q) && !e.filename.toLowerCase().includes(q)) return false;
+    const body = (e.content || '').toLowerCase();
+    if (q && !e.title.toLowerCase().includes(q) && !body.includes(q) && !e.filename.toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -813,20 +922,28 @@ function timeAgo(ms) {
   return Math.floor(d/365) + 'y ago';
 }
 
-// Real-time polling for changes
+// Real-time polling for changes (metadata only)
 setInterval(async () => {
   try {
-    const entries = await fetch('/api/entries').then(r => r.json());
-    if (JSON.stringify(entries.map(e => e.lastModified)) !== JSON.stringify(allEntries.map(e => e.lastModified))) {
-      allEntries = entries;
-      const stats = await fetch('/api/stats').then(r => r.json());
-      renderSidebar(stats.categories);
+    const resp = await fetch('/api/entries?meta=1', {
+      headers: entriesETag ? { 'If-None-Match': entriesETag } : {}
+    });
+
+    if (resp.status === 304) return;
+    if (!resp.ok) return;
+
+    const etag = resp.headers.get('etag');
+    if (etag) entriesETag = etag;
+
+    const meta = await resp.json();
+    if (meta.revision && meta.revision !== entriesRevision) {
+      await init(true);
       filterCategory(currentCategory, document.querySelector('.cat-btn.active'));
     }
   } catch {}
 }, 5000);
 
-init();
+init(true);
 </script>
 </body>
 </html>`;

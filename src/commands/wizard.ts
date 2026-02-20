@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import * as p from "@clack/prompts";
-import { existsSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { loadConfig } from "../lib/config.js";
 import type { Provider } from "../lib/config.js";
@@ -32,14 +32,99 @@ const PROVIDER_INFO: Record<string, { envVar: string; label: string; hint: strin
   },
 };
 
-export async function wizardCommand(options: { dir?: string }) {
-  const repoRoot = options.dir || process.cwd();
+const SUPPORTED_TOOLS = ["claude", "cursor", "copilot", "windsurf", "cline", "aider", "continue"] as const;
 
-  p.intro(chalk.bgCyan.black(" repomemory ") + chalk.dim(" Your codebase never forgets."));
+type ToolName = (typeof SUPPORTED_TOOLS)[number];
+
+function detectProviders(): string[] {
+  const detected: string[] = [];
+  for (const [provider, info] of Object.entries(PROVIDER_INFO)) {
+    if (process.env[info.envVar]) {
+      detected.push(provider);
+    }
+  }
+  if (!detected.includes("gemini") && (process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY)) {
+    detected.push("gemini");
+  }
+  if (!detected.includes("grok") && process.env.XAI_API_KEY) {
+    detected.push("grok");
+  }
+  return detected;
+}
+
+function detectEmbeddingProviders(): Array<{ provider: string; label: string }> {
+  const providers: Array<{ provider: string; label: string }> = [];
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
+    providers.push({ provider: "gemini", label: "Gemini (text-embedding-004)" });
+  }
+  if (process.env.OPENAI_API_KEY) {
+    providers.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
+  }
+  return providers;
+}
+
+function parseTools(value: string | undefined): ToolName[] {
+  if (!value) return ["claude"];
+  const tools = value
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+
+  const invalid = tools.filter((t) => !SUPPORTED_TOOLS.includes(t as ToolName));
+  if (invalid.length > 0) {
+    throw new Error(`Unknown tools: ${invalid.join(", ")}. Supported: ${SUPPORTED_TOOLS.join(", ")}`);
+  }
+
+  return [...new Set(tools)] as ToolName[];
+}
+
+export async function wizardCommand(options: {
+  dir?: string;
+  yes?: boolean;
+  defaults?: boolean;
+  noPrompt?: boolean;
+  provider?: string;
+  embeddingProvider?: string;
+  maxFiles?: string;
+  tools?: string;
+  skipAnalyze?: boolean;
+}) {
+  const repoRoot = options.dir || process.cwd();
+  const useDefaults = Boolean(options.yes || options.defaults);
+  const noPrompt = Boolean(options.noPrompt || useDefaults);
+  const interactive = process.stdin.isTTY && process.stdout.isTTY && !noPrompt;
+
+  const requestedMaxFiles = options.maxFiles ? parseInt(options.maxFiles, 10) : undefined;
+  if (options.maxFiles && (!Number.isFinite(requestedMaxFiles) || (requestedMaxFiles ?? 0) <= 0)) {
+    console.log(chalk.red(`Invalid --max-files value "${options.maxFiles}". Must be a positive integer.`));
+    process.exit(1);
+  }
+
+  if (options.provider) {
+    const validProviders: Provider[] = ["anthropic", "openai", "gemini", "grok"];
+    if (!validProviders.includes(options.provider as Provider)) {
+      console.log(chalk.red(`Invalid provider "${options.provider}". Must be one of: ${validProviders.join(", ")}`));
+      process.exit(1);
+    }
+  }
+
+  let requestedTools: ToolName[];
+  try {
+    requestedTools = parseTools(options.tools);
+  } catch (err) {
+    console.log(chalk.red((err as Error).message));
+    process.exit(1);
+  }
+
+  if (interactive) {
+    p.intro(chalk.bgCyan.black(" repomemory ") + chalk.dim(" Your codebase never forgets."));
+  } else {
+    console.log(chalk.bold("\nrepomemory wizard \u2014 non-interactive setup\n"));
+  }
 
   // Step 1: Check if already initialized
   const contextExists = existsSync(join(repoRoot, ".context"));
-  if (contextExists) {
+  if (contextExists && interactive) {
     const overwrite = await p.confirm({
       message: ".context/ already exists. Re-analyze and refresh?",
       initialValue: false,
@@ -56,168 +141,181 @@ export async function wizardCommand(options: { dir?: string }) {
     }
   }
 
-  // Step 2: Detect available API keys
-  const detectedProviders: string[] = [];
-  for (const [provider, info] of Object.entries(PROVIDER_INFO)) {
-    if (process.env[info.envVar]) {
-      detectedProviders.push(provider);
-    }
-  }
-  // Check alternate env vars
-  if (!detectedProviders.includes("gemini") && (process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY)) {
-    detectedProviders.push("gemini");
-  }
-  if (!detectedProviders.includes("grok") && process.env.XAI_API_KEY) {
-    detectedProviders.push("grok");
-  }
+  // Step 2: Provider
+  const detectedProviders = detectProviders();
+  let selectedProvider = options.provider;
 
-  // Step 3: Choose provider
-  let selectedProvider: string;
-
-  if (detectedProviders.length === 1) {
-    p.log.success(`Detected API key for ${chalk.bold(PROVIDER_INFO[detectedProviders[0]].label)}`);
-    selectedProvider = detectedProviders[0];
-  } else if (detectedProviders.length > 1) {
-    const provider = await p.select({
-      message: `Found ${detectedProviders.length} API keys. Which provider?`,
-      options: detectedProviders.map((prov) => ({
-        value: prov,
-        label: PROVIDER_INFO[prov].label,
-        hint: PROVIDER_INFO[prov].hint,
-      })),
-    });
-
-    if (p.isCancel(provider)) {
-      p.cancel("Setup cancelled.");
-      process.exit(0);
-    }
-
-    selectedProvider = provider as string;
-  } else {
-    // No API keys found — ask which they want to use
-    p.log.warn("No API keys detected in environment.");
-
-    const provider = await p.select({
-      message: "Which AI provider will you use?",
-      options: Object.entries(PROVIDER_INFO).map(([key, info]) => ({
-        value: key,
-        label: info.label,
-        hint: info.hint,
-      })),
-    });
-
-    if (p.isCancel(provider)) {
-      p.cancel("Setup cancelled.");
-      process.exit(0);
-    }
-
-    selectedProvider = provider as string;
-    const info = PROVIDER_INFO[selectedProvider];
-
-    p.log.info(`Set your API key:\n  ${chalk.cyan(`export ${info.envVar}=your-key-here`)}`);
-
-    const hasKey = await p.confirm({
-      message: "Have you set the key? (You can set it now in another terminal)",
-      initialValue: false,
-    });
-
-    if (p.isCancel(hasKey) || !hasKey) {
-      p.log.info("You can run this wizard again after setting your API key.");
-      p.log.info(`  ${chalk.dim(`export ${info.envVar}=...`)}`);
-      p.log.info(`  ${chalk.dim("repomemory wizard")}`);
-      p.outro("See you soon!");
-      process.exit(0);
+  if (!selectedProvider) {
+    if (detectedProviders.length >= 1) {
+      selectedProvider = detectedProviders[0];
+      if (interactive && detectedProviders.length === 1) {
+        p.log.success(`Detected API key for ${chalk.bold(PROVIDER_INFO[selectedProvider].label)}`);
+      }
+    } else {
+      selectedProvider = "anthropic";
+      if (!interactive && !useDefaults) {
+        console.log(chalk.dim("No API key detected; defaulting provider to anthropic."));
+      }
     }
   }
 
-  // Step 4: Embedding provider for semantic search
-  const embeddingKeys: { provider: string; label: string; hint?: string }[] = [];
-  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    embeddingKeys.push({ provider: "gemini", label: "Gemini (text-embedding-004)", hint: "Free, recommended" });
-  }
-  if (process.env.OPENAI_API_KEY) {
-    embeddingKeys.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
+  if (interactive && !useDefaults) {
+    if (detectedProviders.length > 1 && !options.provider) {
+      const provider = await p.select({
+        message: `Found ${detectedProviders.length} API keys. Which provider?`,
+        options: detectedProviders.map((prov) => ({
+          value: prov,
+          label: PROVIDER_INFO[prov].label,
+          hint: PROVIDER_INFO[prov].hint,
+        })),
+      });
+
+      if (p.isCancel(provider)) {
+        p.cancel("Setup cancelled.");
+        process.exit(0);
+      }
+
+      selectedProvider = provider as string;
+    } else if (detectedProviders.length === 0 && !options.provider) {
+      p.log.warn("No API keys detected in environment.");
+
+      const provider = await p.select({
+        message: "Which AI provider will you use?",
+        options: Object.entries(PROVIDER_INFO).map(([key, info]) => ({
+          value: key,
+          label: info.label,
+          hint: info.hint,
+        })),
+      });
+
+      if (p.isCancel(provider)) {
+        p.cancel("Setup cancelled.");
+        process.exit(0);
+      }
+
+      selectedProvider = provider as string;
+      const info = PROVIDER_INFO[selectedProvider];
+      p.log.info(`Set your API key:\n  ${chalk.cyan(`export ${info.envVar}=your-key-here`)}`);
+    }
   }
 
+  // Step 3: Embeddings
   let selectedEmbedding: string | undefined;
+  const embeddingKeys = detectEmbeddingProviders();
 
-  if (embeddingKeys.length > 0) {
-    const embeddingOptions = [
-      { value: "auto", label: "Auto-detect", hint: `Will use ${embeddingKeys[0].label}` },
-      ...embeddingKeys.map((k) => ({ value: k.provider, label: k.label })),
-      { value: "none", label: "None", hint: "Keyword search only — no API costs" },
-    ];
+  if (options.embeddingProvider) {
+    const normalized = options.embeddingProvider.toLowerCase();
+    if (!["openai", "gemini", "none"].includes(normalized)) {
+      console.log(chalk.red(`Invalid embedding provider "${options.embeddingProvider}". Use openai, gemini, or none.`));
+      process.exit(1);
+    }
+    selectedEmbedding = normalized === "none" ? "__none__" : normalized;
+  } else if (embeddingKeys.length > 0) {
+    selectedEmbedding = embeddingKeys[0].provider;
 
-    const embedding = await p.select({
-      message: "Embedding provider for semantic search?",
-      options: embeddingOptions,
+    if (interactive && !useDefaults) {
+      const embeddingOptions = [
+        { value: "auto", label: "Auto-detect", hint: `Will use ${embeddingKeys[0].label}` },
+        ...embeddingKeys.map((k) => ({ value: k.provider, label: k.label })),
+        { value: "none", label: "None", hint: "Keyword search only \u2014 no API costs" },
+      ];
+
+      const embedding = await p.select({
+        message: "Embedding provider for semantic search?",
+        options: embeddingOptions,
+      });
+
+      if (p.isCancel(embedding)) {
+        p.cancel("Setup cancelled.");
+        process.exit(0);
+      }
+
+      if (embedding !== "auto") {
+        selectedEmbedding = embedding === "none" ? "__none__" : (embedding as string);
+      }
+    }
+  } else {
+    selectedEmbedding = "__none__";
+    if (interactive) {
+      p.log.info("No embedding API keys found. Search will use keyword matching only.");
+      p.log.info(chalk.dim("  Set OPENAI_API_KEY or GEMINI_API_KEY to enable semantic search later."));
+    }
+  }
+
+  // Step 4: Tools
+  let selectedTools: ToolName[] = requestedTools;
+  if (interactive && !options.tools && !useDefaults) {
+    const tools = await p.multiselect({
+      message: "Which AI tools do you use?",
+      options: [
+        { value: "claude", label: "Claude Code", hint: "MCP server auto-starts" },
+        { value: "cursor", label: "Cursor", hint: "Adds .cursor/rules/" },
+        { value: "copilot", label: "GitHub Copilot", hint: "Adds copilot-instructions.md" },
+        { value: "windsurf", label: "Windsurf", hint: "Adds .windsurfrules" },
+        { value: "cline", label: "Cline", hint: "Adds .clinerules" },
+        { value: "aider", label: "Aider", hint: "Adds .aider.conf.yml" },
+        { value: "continue", label: "Continue", hint: "Adds .continue/rules/" },
+      ],
+      required: false,
     });
 
-    if (p.isCancel(embedding)) {
+    if (p.isCancel(tools)) {
       p.cancel("Setup cancelled.");
       process.exit(0);
     }
 
-    if (embedding !== "auto" && embedding !== "none") {
-      selectedEmbedding = embedding as string;
+    selectedTools = (tools as ToolName[]) || [];
+  }
+
+  // Step 5: Analyze decision
+  let runAnalysis = !Boolean(options.skipAnalyze);
+  if (interactive && !options.skipAnalyze && !useDefaults) {
+    const confirmAnalyze = await p.confirm({
+      message: `Analyze your repo with ${PROVIDER_INFO[selectedProvider!].label}? (2-5 min, uses AI)`,
+      initialValue: true,
+    });
+
+    if (p.isCancel(confirmAnalyze)) {
+      p.cancel("Setup cancelled.");
+      process.exit(0);
     }
-    // auto = omit from config (auto-detect at runtime), none = we'll skip
-    if (embedding === "none") {
-      selectedEmbedding = "__none__"; // sentinel to skip writing
-    }
-  } else {
-    p.log.info("No embedding API keys found. Search will use keyword matching only.");
-    p.log.info(chalk.dim("  Set OPENAI_API_KEY or GEMINI_API_KEY to enable semantic search later."));
+
+    runAnalysis = Boolean(confirmAnalyze);
   }
 
-  // Step 5: Choose AI tools to integrate
-  const tools = await p.multiselect({
-    message: "Which AI tools do you use?",
-    options: [
-      { value: "claude", label: "Claude Code", hint: "MCP server auto-starts" },
-      { value: "cursor", label: "Cursor", hint: "Adds .cursor/rules/" },
-      { value: "copilot", label: "GitHub Copilot", hint: "Adds copilot-instructions.md" },
-      { value: "windsurf", label: "Windsurf", hint: "Adds .windsurfrules" },
-      { value: "cline", label: "Cline", hint: "Adds .clinerules" },
-      { value: "aider", label: "Aider", hint: "Adds .aider.conf.yml" },
-      { value: "continue", label: "Continue", hint: "Adds .continue/rules/" },
-    ],
-    required: false,
-  });
-
-  if (p.isCancel(tools)) {
-    p.cancel("Setup cancelled.");
-    process.exit(0);
-  }
-
-  const selectedTools = tools as string[];
-
-  // Step 6: Run analysis?
-  const runAnalysis = await p.confirm({
-    message: `Analyze your repo with ${PROVIDER_INFO[selectedProvider].label}? (2-5 min, uses AI)`,
-    initialValue: true,
-  });
-
-  if (p.isCancel(runAnalysis)) {
-    p.cancel("Setup cancelled.");
-    process.exit(0);
-  }
-
-  // Step 7: Execute everything
-  console.log(); // spacing
+  if (!interactive) console.log();
 
   const s = p.spinner();
+  const config = loadConfig(repoRoot);
 
-  // Init — use shared helpers directly to avoid interleaved console output
+  // Init
   s.start("Initializing .context/ directory...");
   if (!contextExists) {
-    const config = loadConfig(repoRoot);
     const store = new ContextStore(repoRoot, config);
     store.scaffold();
     store.writeIndex(STARTER_INDEX);
     const embeddingToWrite = selectedEmbedding === "__none__" ? undefined : selectedEmbedding;
-    writeDefaultConfigFile(repoRoot, selectedProvider, config.model, embeddingToWrite);
+    writeDefaultConfigFile(repoRoot, selectedProvider!, config.model, embeddingToWrite);
   }
+
+  if (requestedMaxFiles) {
+    const configPath = join(repoRoot, ".repomemory.json");
+    let existingConfig: Record<string, unknown> = {};
+    if (existsSync(configPath)) {
+      try {
+        existingConfig = JSON.parse(readFileSync(configPath, "utf-8"));
+      } catch {
+        existingConfig = {};
+      }
+    }
+    existingConfig.maxFilesForAnalysis = requestedMaxFiles;
+    existingConfig.provider = selectedProvider;
+    if (selectedEmbedding && selectedEmbedding !== "__none__") {
+      existingConfig.embeddingProvider = selectedEmbedding;
+    }
+    writeFileSync(configPath, JSON.stringify(existingConfig, null, 2) + "\n");
+  }
+
   s.stop("Initialized .context/ directory");
 
   // Setup tools
@@ -229,15 +327,16 @@ export async function wizardCommand(options: { dir?: string }) {
 
   // Analyze
   if (runAnalysis) {
-    console.log(); // spacing before analyze (it has its own output)
+    console.log();
     await analyzeCommand({
       dir: repoRoot,
       provider: selectedProvider,
       verbose: false,
+      dryRun: false,
+      merge: false,
     });
   }
 
-  // Done!
   console.log();
   p.note(
     [
@@ -253,7 +352,7 @@ export async function wizardCommand(options: { dir?: string }) {
       `Run ${chalk.cyan("repomemory analyze --merge")} to update without overwriting edits.`,
       `Run ${chalk.cyan("repomemory dashboard")} to browse context in your browser.`,
       "",
-      chalk.dim(`Tip: Next time, use ${chalk.cyan("npx repomemory go")} for quick one-command setup.`),
+      chalk.dim(`Tip: Next time, use ${chalk.cyan("npx repomemory go --yes")} for deterministic one-command setup.`),
     ].join("\n"),
     "Next steps"
   );

@@ -29,13 +29,15 @@ let initSqlJsPromise: Promise<SqlJsStatic> | null = null;
 
 async function getSqlJs(): Promise<SqlJsStatic> {
   if (!initSqlJsPromise) {
-    initSqlJsPromise = import("sql.js").then((mod) => {
-      const initSqlJs = mod.default;
-      return initSqlJs();
-    }).catch((err) => {
-      initSqlJsPromise = null; // Allow retry on failure
-      throw err;
-    });
+    initSqlJsPromise = import("sql.js")
+      .then((mod) => {
+        const initSqlJs = mod.default;
+        return initSqlJs();
+      })
+      .catch((err) => {
+        initSqlJsPromise = null; // Allow retry on failure
+        throw err;
+      });
   }
   return initSqlJsPromise;
 }
@@ -64,12 +66,7 @@ export class SearchIndex {
   private embeddingCache: CachedEmbedding[] | null = null;
   private embeddingCacheDirty = true;
 
-  constructor(
-    contextDir: string,
-    store: ContextStore,
-    embeddingProvider?: EmbeddingProvider | null,
-    alpha?: number
-  ) {
+  constructor(contextDir: string, store: ContextStore, embeddingProvider?: EmbeddingProvider | null, alpha?: number) {
     this.dbPath = join(contextDir, ".search.db");
     this.store = store;
     this.embeddingProvider = embeddingProvider ?? null;
@@ -231,22 +228,12 @@ export class SearchIndex {
       if (existingTimestamp === entryTimestamp) continue;
 
       // Remove old entry (triggers FTS5 delete trigger if applicable)
-      db.run(
-        "DELETE FROM documents WHERE category = ? AND filename = ?",
-        [entry.category, entry.filename]
-      );
+      db.run("DELETE FROM documents WHERE category = ? AND filename = ?", [entry.category, entry.filename]);
 
       db.run(
         `INSERT INTO documents (category, filename, title, content, relative_path, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          entry.category,
-          entry.filename,
-          entry.title,
-          entry.content,
-          entry.relativePath,
-          entryTimestamp,
-        ]
+        [entry.category, entry.filename, entry.title, entry.content, entry.relativePath, entryTimestamp]
       );
     }
 
@@ -291,9 +278,7 @@ export class SearchIndex {
     for (let i = 0; i < missing.length; i += batchSize) {
       const batch = missing.slice(i, i + batchSize);
       const texts = batch.map((m) => {
-        const entry = entries.find(
-          (e) => e.category === m.category && e.filename === m.filename
-        );
+        const entry = entries.find((e) => e.category === m.category && e.filename === m.filename);
         if (!entry) return "";
         return `${entry.title}\n\n${entry.content}`.slice(0, 8000);
       });
@@ -302,10 +287,12 @@ export class SearchIndex {
         const embeddings = await this.embeddingProvider.embed(texts);
         for (let j = 0; j < batch.length; j++) {
           const blob = new Uint8Array(embeddings[j].buffer, embeddings[j].byteOffset, embeddings[j].byteLength);
-          this.db!.run(
-            "UPDATE documents SET embedding = ?, embedding_dims = ? WHERE category = ? AND filename = ?",
-            [blob, this.embeddingProvider.dimensions, batch[j].category, batch[j].filename]
-          );
+          this.db!.run("UPDATE documents SET embedding = ?, embedding_dims = ? WHERE category = ? AND filename = ?", [
+            blob,
+            this.embeddingProvider.dimensions,
+            batch[j].category,
+            batch[j].filename,
+          ]);
         }
       } catch {
         // Skip this batch's embedding failures — keyword search still works
@@ -317,10 +304,7 @@ export class SearchIndex {
   async indexEntry(entry: ContextEntry): Promise<void> {
     const db = await this.ensureDb();
 
-    db.run(
-      "DELETE FROM documents WHERE category = ? AND filename = ?",
-      [entry.category, entry.filename]
-    );
+    db.run("DELETE FROM documents WHERE category = ? AND filename = ?", [entry.category, entry.filename]);
 
     // Compute embedding if provider available
     let embeddingBlob: Uint8Array | null = null;
@@ -358,10 +342,7 @@ export class SearchIndex {
 
   async removeEntry(category: string, filename: string): Promise<void> {
     const db = await this.ensureDb();
-    db.run(
-      "DELETE FROM documents WHERE category = ? AND filename = ?",
-      [category, filename]
-    );
+    db.run("DELETE FROM documents WHERE category = ? AND filename = ?", [category, filename]);
     this.dirty = true;
     this.embeddingCacheDirty = true;
   }
@@ -477,7 +458,9 @@ export class SearchIndex {
 
     for (const term of terms) {
       const pattern = `%${term}%`;
-      scoreParts.push(`(CASE WHEN LOWER(title) LIKE ? THEN 3 ELSE 0 END + CASE WHEN LOWER(category) LIKE ? THEN 2 ELSE 0 END + CASE WHEN LOWER(content) LIKE ? THEN 1 ELSE 0 END)`);
+      scoreParts.push(
+        `(CASE WHEN LOWER(title) LIKE ? THEN 3 ELSE 0 END + CASE WHEN LOWER(category) LIKE ? THEN 2 ELSE 0 END + CASE WHEN LOWER(content) LIKE ? THEN 1 ELSE 0 END)`
+      );
       params.push(pattern, pattern, pattern);
     }
 
@@ -550,11 +533,7 @@ export class SearchIndex {
   }
 
   /** Semantic search using in-memory cached embeddings + cosine similarity */
-  private async searchSemantic(
-    query: string,
-    category?: string,
-    limit: number = 10
-  ): Promise<SearchResult[]> {
+  private async searchSemantic(query: string, category?: string, limit: number = 10): Promise<SearchResult[]> {
     if (!this.embeddingProvider) return [];
 
     const [queryEmbedding] = await this.embeddingProvider.embed([query]);
@@ -578,9 +557,7 @@ export class SearchIndex {
       });
     }
 
-    return scored
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    return scored.sort((a, b) => b.score - a.score).slice(0, limit);
   }
 
   /** Merge keyword and semantic results with weighted scoring */
@@ -601,10 +578,7 @@ export class SearchIndex {
     const maxSemantic = semanticScores.length > 0 ? Math.max(...semanticScores) : 0;
     const semanticRange = maxSemantic - minSemantic || 0.001;
 
-    const scoreMap = new Map<
-      string,
-      { keyword: number; semantic: number; result: SearchResult }
-    >();
+    const scoreMap = new Map<string, { keyword: number; semantic: number; result: SearchResult }>();
 
     for (const r of keywordResults) {
       const key = `${r.category}/${r.filename}`;
@@ -638,10 +612,7 @@ export class SearchIndex {
       .slice(0, limit);
   }
 
-  private mapResults(
-    result: { columns: string[]; values: unknown[][] },
-    query: string
-  ): SearchResult[] {
+  private mapResults(result: { columns: string[]; values: unknown[][] }, query: string): SearchResult[] {
     return result.values.map((row) => ({
       category: row[0] as string,
       filename: row[1] as string,

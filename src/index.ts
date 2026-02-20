@@ -12,6 +12,7 @@ import { dashboardCommand } from "./commands/dashboard.js";
 import { hookCommand } from "./commands/hook.js";
 import { goCommand } from "./commands/go.js";
 import { searchCommand } from "./commands/search.js";
+import { doctorCommand } from "./commands/doctor.js";
 import {
   globalListCommand,
   globalReadCommand,
@@ -29,32 +30,22 @@ const program = new Command();
 
 program
   .name("repomemory")
-  .description(
-    "Your codebase never forgets. Persistent, structured memory for AI coding agents."
-  )
+  .description("Your codebase never forgets. Persistent, structured memory for AI coding agents.")
   .version(version);
 
 program
   .command("init")
   .description("Initialize .context/ directory in the current repo")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
-  .option(
-    "-p, --provider <provider>",
-    "AI provider (anthropic, openai, gemini, grok)"
-  )
+  .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
   .option("-e, --embedding-provider <provider>", "Embedding provider for semantic search (openai, gemini)")
   .action(initCommand);
 
 program
   .command("analyze")
-  .description(
-    "Analyze the repository with AI and populate .context/ with structured knowledge"
-  )
+  .description("Analyze the repository with AI and populate .context/ with structured knowledge")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
-  .option(
-    "-p, --provider <provider>",
-    "AI provider (anthropic, openai, gemini, grok)"
-  )
+  .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
   .option("-m, --model <model>", "Model to use (provider-specific)")
   .option("-v, --verbose", "Show detailed output", false)
   .option("--dry-run", "Show what would be analyzed without calling the AI", false)
@@ -76,9 +67,7 @@ program
 
 program
   .command("setup <tool>")
-  .description(
-    "Configure AI tool integration (claude, cursor, copilot, windsurf, cline, aider, continue)"
-  )
+  .description("Configure AI tool integration (claude, cursor, copilot, windsurf, cline, aider, continue)")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .action(setupCommand);
 
@@ -101,6 +90,14 @@ program
   .command("wizard")
   .description("Interactive guided setup — provider, tools, and first analysis in one flow")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
+  .option("-y, --yes", "Use defaults and skip all prompts", false)
+  .option("--defaults", "Alias for --yes", false)
+  .option("--no-prompt", "Fail instead of prompting when input is required", false)
+  .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
+  .option("-e, --embedding-provider <provider>", "Embedding provider (openai, gemini, none)")
+  .option("--max-files <n>", "Max files to analyze during setup", "80")
+  .option("--tools <tools>", "Comma-separated tools to configure (claude,cursor,copilot,windsurf,cline,aider,continue)")
+  .option("--skip-analyze", "Skip the analysis step", false)
   .action(wizardCommand);
 
 program
@@ -117,18 +114,28 @@ program
   .action(hookCommand);
 
 program
+  .command("doctor")
+  .description("Run diagnostics and output a support-friendly health report")
+  .option("-d, --dir <path>", "Repository root directory", process.cwd())
+  .option("--json", "Output machine-readable JSON", false)
+  .option("--output <path>", "Write a diagnostics bundle to this file")
+  .action(doctorCommand);
+
+program
   .command("go")
   .description("One-command setup — init, analyze, and configure Claude Code in one flow")
   .option("-d, --dir <path>", "Repository root directory", process.cwd())
   .option("-p, --provider <provider>", "AI provider (anthropic, openai, gemini, grok)")
   .option("-m, --model <model>", "Model to use (provider-specific)")
-  .option("-e, --embedding-provider <provider>", "Embedding provider for semantic search (openai, gemini)")
+  .option("-e, --embedding-provider <provider>", "Embedding provider for semantic search (openai, gemini, none)")
+  .option("--max-files <n>", "Max files to analyze", "80")
+  .option("-y, --yes", "Use defaults and skip all prompts", false)
+  .option("--defaults", "Alias for --yes", false)
+  .option("--no-prompt", "Fail instead of prompting when input is required", false)
   .option("--skip-analyze", "Skip the analysis step", false)
   .action(goCommand);
 
-const globalCmd = program
-  .command("global")
-  .description("Manage global developer context (~/.repomemory/global/)");
+const globalCmd = program.command("global").description("Manage global developer context (~/.repomemory/global/)");
 
 globalCmd
   .command("list")
@@ -147,20 +154,11 @@ globalCmd
   .option("--content <content>", "Content to write")
   .action(globalWriteCommand);
 
-globalCmd
-  .command("delete <entry>")
-  .description("Delete a global context entry")
-  .action(globalDeleteCommand);
+globalCmd.command("delete <entry>").description("Delete a global context entry").action(globalDeleteCommand);
 
-globalCmd
-  .command("export")
-  .description("Export all global context as JSON to stdout")
-  .action(globalExportCommand);
+globalCmd.command("export").description("Export all global context as JSON to stdout").action(globalExportCommand);
 
-globalCmd
-  .command("import")
-  .description("Import global context from JSON on stdin")
-  .action(globalImportCommand);
+globalCmd.command("import").description("Import global context from JSON on stdin").action(globalImportCommand);
 
 // Global error handlers
 process.on("uncaughtException", (err) => {

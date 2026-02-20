@@ -14,10 +14,7 @@ npx -y repomemory sync --dir "$(git rev-parse --show-toplevel)" 2>/dev/null &
 ${HOOK_MARKER_END}
 `;
 
-export async function hookCommand(
-  action: string,
-  options: { dir?: string }
-) {
+export async function hookCommand(action: string, options: { dir?: string }) {
   const repoRoot = options.dir || process.cwd();
 
   switch (action) {
@@ -104,9 +101,7 @@ function uninstallHook(repoRoot: string) {
   } else {
     // Legacy: remove individual repomemory lines
     const lines = existing.split("\n");
-    const filtered = lines.filter(
-      (line) => !line.includes("repomemory") || line.startsWith("#!")
-    );
+    const filtered = lines.filter((line) => !line.includes("repomemory") || line.startsWith("#!"));
     remaining = filtered.join("\n").trim();
   }
 

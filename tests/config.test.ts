@@ -24,14 +24,7 @@ describe("loadConfig", () => {
     expect(config.maxFilesForAnalysis).toBe(80);
     expect(config.maxGitCommits).toBe(100);
     expect(config.autoIndex).toBe(true);
-    expect(config.categories).toEqual([
-      "facts",
-      "decisions",
-      "regressions",
-      "sessions",
-      "changelog",
-      "preferences",
-    ]);
+    expect(config.categories).toEqual(["facts", "decisions", "regressions", "sessions", "changelog", "preferences"]);
   });
 
   it("returns a copy of defaults (not the same reference)", () => {
@@ -47,10 +40,7 @@ describe("loadConfig", () => {
       model: "gpt-4o-mini",
       maxFileSize: 50_000,
     };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(userConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(userConfig));
 
     const config = loadConfig(tempDir);
     expect(config.provider).toBe("openai");
@@ -80,10 +70,7 @@ describe("loadConfig", () => {
 
   it("Zod validation catches bad provider type and returns defaults", () => {
     const badConfig = { provider: "not-a-real-provider" };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(badConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(badConfig));
 
     // loadConfig prints a warning and returns defaults when validation fails
     const config = loadConfig(tempDir);
@@ -92,10 +79,7 @@ describe("loadConfig", () => {
 
   it("Zod validation catches negative maxFileSize and returns defaults", () => {
     const badConfig = { maxFileSize: -100 };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(badConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(badConfig));
 
     const config = loadConfig(tempDir);
     // Zod's .positive() rejects negative numbers, so loadConfig returns defaults
@@ -104,10 +88,7 @@ describe("loadConfig", () => {
 
   it("Zod validation catches wrong type for autoIndex and returns defaults", () => {
     const badConfig = { autoIndex: "yes" };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(badConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(badConfig));
 
     const config = loadConfig(tempDir);
     expect(config.autoIndex).toBe(DEFAULT_CONFIG.autoIndex);
@@ -117,10 +98,7 @@ describe("loadConfig", () => {
     const userConfig = {
       ignorePatterns: ["my-custom-dir", "*.log"],
     };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(userConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(userConfig));
 
     const config = loadConfig(tempDir);
     // Should contain all default patterns plus user patterns
@@ -128,36 +106,26 @@ describe("loadConfig", () => {
     expect(config.ignorePatterns).toContain(".git");
     expect(config.ignorePatterns).toContain("my-custom-dir");
     expect(config.ignorePatterns).toContain("*.log");
-    expect(config.ignorePatterns.length).toBe(
-      DEFAULT_CONFIG.ignorePatterns.length + 2
-    );
+    expect(config.ignorePatterns.length).toBe(DEFAULT_CONFIG.ignorePatterns.length + 2);
   });
 
   it("keyFilePatterns are additive (user patterns appended to defaults)", () => {
     const userConfig = {
       keyFilePatterns: ["custom-config.yaml"],
     };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(userConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(userConfig));
 
     const config = loadConfig(tempDir);
     expect(config.keyFilePatterns).toContain("package.json");
     expect(config.keyFilePatterns).toContain("custom-config.yaml");
-    expect(config.keyFilePatterns.length).toBe(
-      DEFAULT_CONFIG.keyFilePatterns.length + 1
-    );
+    expect(config.keyFilePatterns.length).toBe(DEFAULT_CONFIG.keyFilePatterns.length + 1);
   });
 
   it("categories are replaced (not additive) when specified by user", () => {
     const userConfig = {
       categories: ["notes", "todos"],
     };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(userConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(userConfig));
 
     const config = loadConfig(tempDir);
     expect(config.categories).toEqual(["notes", "todos"]);
@@ -165,10 +133,7 @@ describe("loadConfig", () => {
 
   it("accepts all valid provider values", () => {
     for (const provider of ["anthropic", "openai", "gemini", "grok"]) {
-      writeFileSync(
-        join(tempDir, ".repomemory.json"),
-        JSON.stringify({ provider })
-      );
+      writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify({ provider }));
       const config = loadConfig(tempDir);
       expect(config.provider).toBe(provider);
     }
@@ -176,10 +141,7 @@ describe("loadConfig", () => {
 
   it("preserves contextDir when specified", () => {
     const userConfig = { contextDir: ".my-context" };
-    writeFileSync(
-      join(tempDir, ".repomemory.json"),
-      JSON.stringify(userConfig)
-    );
+    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(userConfig));
 
     const config = loadConfig(tempDir);
     expect(config.contextDir).toBe(".my-context");

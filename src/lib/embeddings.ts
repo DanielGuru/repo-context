@@ -50,9 +50,7 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
  * OpenAI is kept as a fallback for users who explicitly want it or don't have a Gemini key.
  * Set `embeddingProvider: "openai"` in .repomemory.json to force OpenAI.
  */
-export async function createEmbeddingProvider(
-  config: EmbeddingConfig
-): Promise<EmbeddingProvider | null> {
+export async function createEmbeddingProvider(config: EmbeddingConfig): Promise<EmbeddingProvider | null> {
   // Explicit provider in config takes priority
   if (config.provider === "openai") {
     const apiKey = config.apiKey || process.env.OPENAI_API_KEY;
@@ -75,9 +73,7 @@ export async function createEmbeddingProvider(
   // Auto-detect: prefer Gemini (free, strong on technical/code content)
   if (!config.provider) {
     const geminiKey =
-      process.env.GEMINI_API_KEY ||
-      process.env.GOOGLE_API_KEY ||
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
     if (geminiKey) {
       return createGeminiEmbeddingProvider(geminiKey, config.model);
     }
@@ -91,10 +87,7 @@ export async function createEmbeddingProvider(
   return null;
 }
 
-async function createOpenAIEmbeddingProvider(
-  apiKey: string,
-  model?: string
-): Promise<EmbeddingProvider> {
+async function createOpenAIEmbeddingProvider(apiKey: string, model?: string): Promise<EmbeddingProvider> {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ apiKey });
   const embeddingModel = model || "text-embedding-3-small";
@@ -109,7 +102,9 @@ async function createOpenAIEmbeddingProvider(
 
   return {
     name: "openai",
-    get dimensions() { return dims; },
+    get dimensions() {
+      return dims;
+    },
     embed: async (texts: string[]) => {
       const response = await client.embeddings.create({
         model: embeddingModel,
@@ -124,10 +119,7 @@ async function createOpenAIEmbeddingProvider(
   };
 }
 
-async function createGeminiEmbeddingProvider(
-  apiKey: string,
-  model?: string
-): Promise<EmbeddingProvider> {
+async function createGeminiEmbeddingProvider(apiKey: string, model?: string): Promise<EmbeddingProvider> {
   const { GoogleGenerativeAI } = await import("@google/generative-ai");
   const genAI = new GoogleGenerativeAI(apiKey);
   const embeddingModel = model || "text-embedding-004";
@@ -137,7 +129,9 @@ async function createGeminiEmbeddingProvider(
 
   return {
     name: "gemini",
-    get dimensions() { return dims; },
+    get dimensions() {
+      return dims;
+    },
     embed: async (texts: string[]) => {
       // Parallelize in chunks of 5 to avoid rate limits
       const chunkSize = 5;

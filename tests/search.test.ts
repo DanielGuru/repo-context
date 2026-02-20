@@ -131,7 +131,11 @@ describe("SearchIndex", () => {
   });
 
   it("handles preferences category", async () => {
-    store.writeEntry("preferences", "coding-style", "# Coding Style\n\nPrefer functional components over class components.");
+    store.writeEntry(
+      "preferences",
+      "coding-style",
+      "# Coding Style\n\nPrefer functional components over class components."
+    );
 
     const index = new SearchIndex(contextDir, store);
     await index.rebuild();
@@ -167,7 +171,7 @@ describe("SearchIndex", () => {
     expect(Array.isArray(results)).toBe(true);
 
     // Add a new entry directly (bypasses rebuild)
-    const newEntry = store.listEntries().find(e => e.filename === "cache-test.md")!;
+    const newEntry = store.listEntries().find((e) => e.filename === "cache-test.md")!;
     await index.indexEntry({ ...newEntry, title: "Cache Updated", content: "# Cache Updated\n\nModified entry." });
 
     // Remove it
@@ -214,13 +218,41 @@ describe("SearchIndex", () => {
       await index.rebuild();
 
       const keyword = [
-        { category: "facts", filename: "a.md", title: "A", snippet: "...", score: 10, relativePath: ".context/facts/a.md" },
-        { category: "facts", filename: "b.md", title: "B", snippet: "...", score: 5, relativePath: ".context/facts/b.md" },
+        {
+          category: "facts",
+          filename: "a.md",
+          title: "A",
+          snippet: "...",
+          score: 10,
+          relativePath: ".context/facts/a.md",
+        },
+        {
+          category: "facts",
+          filename: "b.md",
+          title: "B",
+          snippet: "...",
+          score: 5,
+          relativePath: ".context/facts/b.md",
+        },
       ];
 
       const semantic = [
-        { category: "facts", filename: "a.md", title: "A", snippet: "...", score: 0.9, relativePath: ".context/facts/a.md" },
-        { category: "facts", filename: "c.md", title: "C", snippet: "...", score: 0.8, relativePath: ".context/facts/c.md" },
+        {
+          category: "facts",
+          filename: "a.md",
+          title: "A",
+          snippet: "...",
+          score: 0.9,
+          relativePath: ".context/facts/a.md",
+        },
+        {
+          category: "facts",
+          filename: "c.md",
+          title: "C",
+          snippet: "...",
+          score: 0.8,
+          relativePath: ".context/facts/c.md",
+        },
       ];
 
       const merged = index.hybridMerge(keyword, semantic, "test", 5);
@@ -236,12 +268,40 @@ describe("SearchIndex", () => {
       await index.rebuild();
 
       const keyword = [
-        { category: "facts", filename: "a.md", title: "A", snippet: "...", score: 8, relativePath: ".context/facts/a.md" },
-        { category: "facts", filename: "b.md", title: "B", snippet: "...", score: 10, relativePath: ".context/facts/b.md" },
+        {
+          category: "facts",
+          filename: "a.md",
+          title: "A",
+          snippet: "...",
+          score: 8,
+          relativePath: ".context/facts/a.md",
+        },
+        {
+          category: "facts",
+          filename: "b.md",
+          title: "B",
+          snippet: "...",
+          score: 10,
+          relativePath: ".context/facts/b.md",
+        },
       ];
       const semantic = [
-        { category: "facts", filename: "a.md", title: "A", snippet: "...", score: 0.85, relativePath: ".context/facts/a.md" },
-        { category: "facts", filename: "b.md", title: "B", snippet: "...", score: 0.90, relativePath: ".context/facts/b.md" },
+        {
+          category: "facts",
+          filename: "a.md",
+          title: "A",
+          snippet: "...",
+          score: 0.85,
+          relativePath: ".context/facts/a.md",
+        },
+        {
+          category: "facts",
+          filename: "b.md",
+          title: "B",
+          snippet: "...",
+          score: 0.9,
+          relativePath: ".context/facts/b.md",
+        },
       ];
 
       const merged = index.hybridMerge(keyword, semantic, "test", 5);
@@ -257,11 +317,25 @@ describe("SearchIndex", () => {
       await indexKeyword.rebuild();
 
       const keyword = [
-        { category: "facts", filename: "kw.md", title: "KW", snippet: "...", score: 10, relativePath: ".context/facts/kw.md" },
+        {
+          category: "facts",
+          filename: "kw.md",
+          title: "KW",
+          snippet: "...",
+          score: 10,
+          relativePath: ".context/facts/kw.md",
+        },
       ];
 
       const semantic = [
-        { category: "facts", filename: "sem.md", title: "SEM", snippet: "...", score: 0.99, relativePath: ".context/facts/sem.md" },
+        {
+          category: "facts",
+          filename: "sem.md",
+          title: "SEM",
+          snippet: "...",
+          score: 0.99,
+          relativePath: ".context/facts/sem.md",
+        },
       ];
 
       // alpha=1.0 means keyword-only

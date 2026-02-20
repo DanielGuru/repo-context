@@ -25,7 +25,8 @@ export function extractJSON<T = unknown>(raw: string): T {
     const lastBrace = text.lastIndexOf("}");
     const lastBracket = text.lastIndexOf("]");
 
-    let start = -1, end = -1;
+    let start = -1,
+      end = -1;
     if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
       start = firstBrace;
       end = lastBrace;

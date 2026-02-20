@@ -152,7 +152,7 @@ export async function analyzeCommand(options: {
   if (options.model) config.model = options.model;
 
   // Validate API key before doing any expensive work (skip for dry-run)
-  const hasKey = options.dryRun || await validateApiKey(config);
+  const hasKey = options.dryRun || (await validateApiKey(config));
   if (!hasKey) {
     const envVar = {
       anthropic: "ANTHROPIC_API_KEY",
@@ -394,9 +394,7 @@ export async function analyzeCommand(options: {
   printCoverageBar("Regressions", regressionsCount, 3);
   printCoverageBar("Preferences", preferencesCount, 2);
 
-  console.log(
-    chalk.dim(`\n  Total: ${stats.totalFiles} files | ${(stats.totalSize / 1024).toFixed(1)}KB\n`)
-  );
+  console.log(chalk.dim(`\n  Total: ${stats.totalFiles} files | ${(stats.totalSize / 1024).toFixed(1)}KB\n`));
 
   console.log(chalk.bold("Next:"));
   console.log(`  ${chalk.dim("\u2022")} Review .context/ files and edit as needed`);
@@ -472,7 +470,9 @@ function buildAnalysisPrompt(
       const oldest = git.recentCommits[git.recentCommits.length - 1].date.split("T")[0];
 
       parts.push(`\n### Recent Commits (${oldest} to ${newest})`);
-      parts.push(`IMPORTANT: These commits are historical context for understanding the project. A commit that says "fix X" means X was ALREADY FIXED — do NOT document it as an active regression.`);
+      parts.push(
+        `IMPORTANT: These commits are historical context for understanding the project. A commit that says "fix X" means X was ALREADY FIXED — do NOT document it as an active regression.`
+      );
       for (const commit of git.recentCommits.slice(0, 50)) {
         parts.push(
           `- ${commit.shortHash} ${commit.message} (${commit.author}, ${commit.date.split("T")[0]}, +${commit.insertions}/-${commit.deletions})`
@@ -507,7 +507,8 @@ function getFrameworkHints(frameworks: string[]): string {
   const fw = new Set(frameworks);
 
   // Frontend frameworks
-  if (fw.has("Next.js")) hints.push("routing conventions (App Router vs Pages Router), API routes, SSR/SSG patterns, middleware");
+  if (fw.has("Next.js"))
+    hints.push("routing conventions (App Router vs Pages Router), API routes, SSR/SSG patterns, middleware");
   else if (fw.has("Nuxt")) hints.push("file-based routing, server routes, auto-imports, composables");
   else if (fw.has("Remix")) hints.push("loader/action patterns, nested routes, data fetching");
   else if (fw.has("React")) hints.push("component patterns, state management, routing approach");
@@ -517,11 +518,14 @@ function getFrameworkHints(frameworks: string[]): string {
   else if (fw.has("Astro")) hints.push("island architecture, content collections, SSG patterns");
 
   // Styling & UI libraries
-  if (fw.has("Tailwind CSS")) hints.push("Tailwind config, custom theme/design tokens, global CSS, dark mode strategy, utility patterns");
-  if (fw.has("Styled Components") || fw.has("Emotion")) hints.push("theme provider, design tokens, global styles, CSS-in-JS patterns");
+  if (fw.has("Tailwind CSS"))
+    hints.push("Tailwind config, custom theme/design tokens, global CSS, dark mode strategy, utility patterns");
+  if (fw.has("Styled Components") || fw.has("Emotion"))
+    hints.push("theme provider, design tokens, global styles, CSS-in-JS patterns");
   if (fw.has("Material UI")) hints.push("theme customization, component overrides, sx prop patterns");
   if (fw.has("Chakra UI")) hints.push("theme config, custom components, style props");
-  if (fw.has("Radix UI") || fw.has("shadcn/ui")) hints.push("component primitives, styling approach, theme/CSS variables");
+  if (fw.has("Radix UI") || fw.has("shadcn/ui"))
+    hints.push("component primitives, styling approach, theme/CSS variables");
 
   // ORMs
   if (fw.has("Drizzle ORM")) hints.push("schema location, migration workflow, query patterns");

@@ -15,11 +15,18 @@ export async function goCommand(options: {
   provider?: string;
   model?: string;
   embeddingProvider?: string;
+  maxFiles?: string;
+  yes?: boolean;
+  defaults?: boolean;
+  noPrompt?: boolean;
   skipAnalyze?: boolean;
 }) {
   const repoRoot = options.dir || process.cwd();
   const config = loadConfig(repoRoot);
   const configPath = join(repoRoot, ".repomemory.json");
+  const useDefaults = Boolean(options.yes || options.defaults);
+  const noPrompt = Boolean(options.noPrompt || useDefaults);
+  const interactive = process.stdin.isTTY && process.stdout.isTTY && !noPrompt;
 
   if (options.provider) {
     const validProviders: Provider[] = ["anthropic", "openai", "gemini", "grok"];
@@ -28,6 +35,16 @@ export async function goCommand(options: {
       process.exit(1);
     }
     config.provider = options.provider as Provider;
+  }
+
+  let requestedMaxFiles: number | undefined;
+  if (options.maxFiles) {
+    const parsed = parseInt(options.maxFiles, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      console.log(chalk.red(`Invalid --max-files value "${options.maxFiles}". Must be a positive integer.`));
+      process.exit(1);
+    }
+    requestedMaxFiles = parsed;
   }
 
   const store = new ContextStore(repoRoot, config);
@@ -48,7 +65,11 @@ export async function goCommand(options: {
       steps.push(`Created ${globalDir} for developer preferences`);
     } else {
       const globalPrefs = globalStore.listEntries("preferences");
-      console.log(chalk.dim(`${currentStep}/${totalSteps} Global profile loaded (${globalPrefs.length} preference${globalPrefs.length !== 1 ? "s" : ""}).`));
+      console.log(
+        chalk.dim(
+          `${currentStep}/${totalSteps} Global profile loaded (${globalPrefs.length} preference${globalPrefs.length !== 1 ? "s" : ""}).`
+        )
+      );
     }
   } else {
     console.log(chalk.dim(`${currentStep}/${totalSteps} Global context disabled.`));
@@ -63,6 +84,7 @@ export async function goCommand(options: {
 
   // Determine embedding provider — ask if context is empty (unless CLI flag provided)
   let embeddingProvider = options.embeddingProvider;
+  if (embeddingProvider === "none") embeddingProvider = undefined;
   if (!embeddingProvider && needsSetup) {
     const embeddingKeys: { provider: string; label: string; hint?: string }[] = [];
     if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
@@ -72,7 +94,7 @@ export async function goCommand(options: {
       embeddingKeys.push({ provider: "openai", label: "OpenAI (text-embedding-3-small)" });
     }
 
-    if (embeddingKeys.length > 0) {
+    if (embeddingKeys.length > 0 && interactive) {
       const embeddingChoice = await p.select({
         message: "Embedding provider for semantic search?",
         options: [
@@ -87,6 +109,15 @@ export async function goCommand(options: {
       }
 
       embeddingProvider = embeddingChoice === "none" ? undefined : (embeddingChoice as string);
+    } else if (embeddingKeys.length > 0) {
+      embeddingProvider = embeddingKeys[0].provider;
+      if (!useDefaults) {
+        console.log(
+          chalk.dim(
+            `${currentStep}/${totalSteps} Non-interactive mode. Using embedding provider: ${embeddingProvider}.`
+          )
+        );
+      }
     } else {
       console.log(chalk.dim(`${currentStep}/${totalSteps} No embedding API keys found. Using keyword search.`));
       console.log(chalk.dim("  Set OPENAI_API_KEY or GEMINI_API_KEY to enable semantic search."));
@@ -96,8 +127,8 @@ export async function goCommand(options: {
   }
 
   // Determine max files for analysis — ask if context is empty
-  let maxFiles = config.maxFilesForAnalysis;
-  if (needsSetup) {
+  let maxFiles = requestedMaxFiles ?? config.maxFilesForAnalysis;
+  if (needsSetup && !requestedMaxFiles && interactive) {
     const maxFilesChoice = await p.select({
       message: `Max files to analyze?`,
       options: [
@@ -175,7 +206,9 @@ export async function goCommand(options: {
           steps.push("Configured Claude Code MCP server + post-commit hook");
           claudeConfigured = true;
         } catch {
-          console.log(chalk.yellow(`  Warning: Failed to configure Claude Code. Run manually: npx repomemory setup claude`));
+          console.log(
+            chalk.yellow(`  Warning: Failed to configure Claude Code. Run manually: npx repomemory setup claude`)
+          );
         }
       } else {
         console.log(chalk.dim(`${currentStep}/${totalSteps} Claude Code already configured.`));
@@ -248,11 +281,19 @@ export async function goCommand(options: {
   // Step 4: Print CLAUDE.md block
   currentStep++;
   console.log(chalk.cyan(`\n${currentStep}/${totalSteps}`) + ` Add this to your ${chalk.bold("CLAUDE.md")}:\n`);
-  console.log(chalk.cyan("  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 copy below into CLAUDE.md \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"));
+  console.log(
+    chalk.cyan(
+      "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 copy below into CLAUDE.md \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    )
+  );
   console.log();
   console.log(CLAUDE_MD_BLOCK);
   console.log();
-  console.log(chalk.cyan("  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"));
+  console.log(
+    chalk.cyan(
+      "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    )
+  );
 
   // Summary
   console.log(chalk.bold("\n\u2713 Done!\n"));
@@ -265,9 +306,11 @@ export async function goCommand(options: {
   }
 
   if (!claudeConfigured) {
-    console.log(chalk.dim("\n  To connect other tools: npx repomemory setup <cursor|copilot|windsurf|cline|aider|continue>"));
+    console.log(
+      chalk.dim("\n  To connect other tools: npx repomemory setup <cursor|copilot|windsurf|cline|aider|continue>")
+    );
   }
 
-  console.log(chalk.dim("\n  Commit to git: git add .context/ .repomemory.json && git commit -m \"Add repomemory\""));
+  console.log(chalk.dim('\n  Commit to git: git add .context/ .repomemory.json && git commit -m "Add repomemory"'));
   console.log();
 }

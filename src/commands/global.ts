@@ -63,7 +63,7 @@ export async function globalWriteCommand(entry: string, options: { content?: str
 
   const parts = entry.split("/");
   if (parts.length !== 2) {
-    console.error(chalk.red("  Usage: repomemory global write <category/filename> --content \"...\""));
+    console.error(chalk.red('  Usage: repomemory global write <category/filename> --content "..."'));
     process.exit(1);
   }
 

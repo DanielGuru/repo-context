@@ -4,10 +4,7 @@ import chalk from "chalk";
 
 const SUPPORTED_TOOLS = ["claude", "cursor", "copilot", "windsurf", "cline", "aider", "continue"];
 
-export async function setupCommand(
-  tool: string,
-  options: { dir?: string }
-) {
+export async function setupCommand(tool: string, options: { dir?: string }) {
   const repoRoot = options.dir || process.cwd();
 
   if (!SUPPORTED_TOOLS.includes(tool)) {
@@ -155,7 +152,7 @@ exit 0
 
   if (!mcpAlreadyConfigured) {
     console.log(chalk.bold(`MCP server added to ${configPath}:`));
-    console.log(chalk.dim(JSON.stringify({ "repomemory": mcpServers["repomemory"] }, null, 2)));
+    console.log(chalk.dim(JSON.stringify({ repomemory: mcpServers["repomemory"] }, null, 2)));
     console.log();
   }
 
@@ -168,7 +165,9 @@ exit 0
   console.log(chalk.dim("Restart Claude Code to activate. The MCP server will auto-start in every project."));
   console.log(chalk.dim("In repos without .context/, the tools are inert (no noise, no errors)."));
   console.log();
-  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient"));
+  console.log(
+    chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient")
+  );
 }
 
 function setupCursor(repoRoot: string) {
@@ -280,19 +279,27 @@ Do NOT skip this step even if the task seems simple.**
 
   if (homeDir && existsSync(cursorConfigDir)) {
     console.log(chalk.bold(`MCP server added to ${mcpConfigPath}:`));
-    console.log(chalk.dim(JSON.stringify({ "repomemory": { command: "npx", args: ["-y", "repomemory", "serve"] } }, null, 2)));
+    console.log(
+      chalk.dim(JSON.stringify({ repomemory: { command: "npx", args: ["-y", "repomemory", "serve"] } }, null, 2))
+    );
     console.log();
   } else {
     console.log(chalk.yellow("  \u26a0 ~/.cursor/ not found. Install Cursor, then add the MCP server manually:"));
     console.log(chalk.dim(`  Add to ~/.cursor/mcp.json:`));
-    console.log(chalk.dim(JSON.stringify({ mcpServers: { "repomemory": { command: "npx", args: ["-y", "repomemory", "serve"] } } }, null, 2)));
+    console.log(
+      chalk.dim(
+        JSON.stringify({ mcpServers: { repomemory: { command: "npx", args: ["-y", "repomemory", "serve"] } } }, null, 2)
+      )
+    );
     console.log();
   }
 
   console.log(`  ${chalk.green("\u2713")} Created .cursor/rules/repomemory.mdc`);
   console.log();
   console.log(chalk.dim("Restart Cursor to activate. The MCP server will auto-start in every project."));
-  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient"));
+  console.log(
+    chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient")
+  );
 }
 
 function setupCopilot(repoRoot: string) {
@@ -436,7 +443,9 @@ read:
   console.log(`  ${chalk.green("\u2713")} Created/updated .aider.conf.yml`);
   console.log(chalk.dim(`  Aider will auto-include .context/index.md in every session.`));
   if (!existsSync(readPath)) {
-    console.log(chalk.yellow(`  \u26a0 Run \`repomemory init && repomemory analyze\` first to generate context files.`));
+    console.log(
+      chalk.yellow(`  \u26a0 Run \`repomemory init && repomemory analyze\` first to generate context files.`)
+    );
   }
 }
 

@@ -33,12 +33,7 @@ export async function searchCommand(
   }
 
   // Build repo search index
-  const searchIndex = new SearchIndex(
-    store.path,
-    store,
-    embeddingProvider,
-    config.hybridAlpha
-  );
+  const searchIndex = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
   await searchIndex.rebuild();
 
   // Also search global context if enabled
@@ -48,12 +43,7 @@ export async function searchCommand(
       const globalDir = resolveGlobalDir(config);
       const globalStore = ContextStore.forAbsolutePath(globalDir);
       if (globalStore.exists()) {
-        globalIndex = new SearchIndex(
-          globalStore.path,
-          globalStore,
-          embeddingProvider,
-          config.hybridAlpha
-        );
+        globalIndex = new SearchIndex(globalStore.path, globalStore, embeddingProvider, config.hybridAlpha);
         await globalIndex.rebuild();
       }
     } catch {
@@ -63,13 +53,18 @@ export async function searchCommand(
 
   // Search
   const repoResults = await searchIndex.search(query, options.category, limit);
-  const globalResults = globalIndex
-    ? await globalIndex.search(query, options.category, limit)
-    : [];
+  const globalResults = globalIndex ? await globalIndex.search(query, options.category, limit) : [];
 
   // Merge with repo-first dedup
   const seen = new Set<string>();
-  type TaggedResult = { category: string; filename: string; title: string; snippet: string; score: number; source: string };
+  type TaggedResult = {
+    category: string;
+    filename: string;
+    title: string;
+    snippet: string;
+    score: number;
+    source: string;
+  };
   const merged: TaggedResult[] = [];
 
   for (const r of repoResults) {
@@ -94,9 +89,7 @@ export async function searchCommand(
     process.exit(0);
   }
 
-  console.log(
-    chalk.bold(`\n${results.length} result${results.length === 1 ? "" : "s"} for "${query}"\n`)
-  );
+  console.log(chalk.bold(`\n${results.length} result${results.length === 1 ? "" : "s"} for "${query}"\n`));
 
   for (const r of results) {
     const sourceTag = globalIndex ? chalk.dim(` [${r.source}]`) : "";
@@ -113,9 +106,7 @@ export async function searchCommand(
       }
       console.log();
     } else {
-      const snippet = r.snippet
-        .replace(/\n/g, " ")
-        .slice(0, 120);
+      const snippet = r.snippet.replace(/\n/g, " ").slice(0, 120);
       console.log(`  ${path}${sourceTag} ${score}`);
       console.log(`    ${chalk.bold(r.title)} \u2014 ${chalk.dim(snippet)}`);
     }

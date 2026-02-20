@@ -126,11 +126,19 @@ export async function initCommand(options: { dir?: string; provider?: string; em
 
   console.log(`  ${chalk.cyan("4.")} Add this to your ${chalk.bold("CLAUDE.md")} so Claude uses it automatically:`);
   console.log();
-  console.log(chalk.cyan("  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 copy below into CLAUDE.md \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"));
+  console.log(
+    chalk.cyan(
+      "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 copy below into CLAUDE.md \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    )
+  );
   console.log();
   console.log(CLAUDE_MD_BLOCK);
   console.log();
-  console.log(chalk.cyan("  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"));
+  console.log(
+    chalk.cyan(
+      "  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+    )
+  );
   console.log();
 
   console.log(`  ${chalk.cyan("5.")} Commit to git:`);

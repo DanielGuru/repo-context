@@ -205,7 +205,7 @@ describe("repairTruncatedJSON", () => {
   });
 
   it("handles array at top level (truncated)", () => {
-    const input = '[1, 2, 3';
+    const input = "[1, 2, 3";
     const result = repairTruncatedJSON(input);
     expect(JSON.parse(result)).toEqual([1, 2, 3]);
   });

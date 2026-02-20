@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  statSync,
-  unlinkSync,
-} from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync } from "fs";
 import { join, relative, basename } from "path";
 import type { RepoContextConfig } from "./config.js";
 
@@ -113,11 +105,7 @@ export class ContextStore {
     }
   }
 
-  writeEntry(
-    category: string,
-    filename: string,
-    content: string
-  ): string {
+  writeEntry(category: string, filename: string, content: string): string {
     this.validateCategory(category);
 
     const dir = join(this.contextDir, category);
@@ -130,11 +118,7 @@ export class ContextStore {
     return relative(this.root, filePath);
   }
 
-  appendEntry(
-    category: string,
-    filename: string,
-    content: string
-  ): string {
+  appendEntry(category: string, filename: string, content: string): string {
     this.validateCategory(category);
 
     const dir = join(this.contextDir, category);
@@ -186,9 +170,7 @@ export class ContextStore {
       if (!existsSync(dir)) continue;
 
       const cat = basename(dir);
-      const files = readdirSync(dir).filter(
-        (f) => f.endsWith(".md") && !f.startsWith(".")
-      );
+      const files = readdirSync(dir).filter((f) => f.endsWith(".md") && !f.startsWith("."));
 
       for (const file of files) {
         const filePath = join(dir, file);
@@ -196,9 +178,7 @@ export class ContextStore {
         const content = readFileSync(filePath, "utf-8");
 
         const titleMatch = content.match(/^#\s+(.+)$/m);
-        const title = titleMatch
-          ? titleMatch[1]
-          : basename(file, ".md").replace(/-/g, " ");
+        const title = titleMatch ? titleMatch[1] : basename(file, ".md").replace(/-/g, " ");
 
         entries.push({
           category: cat,
@@ -233,12 +213,7 @@ export class ContextStore {
 
   getAllContent(): string {
     const entries = this.listEntries();
-    return entries
-      .map(
-        (e) =>
-          `--- ${e.category}/${e.filename} ---\n${e.content}`
-      )
-      .join("\n\n");
+    return entries.map((e) => `--- ${e.category}/${e.filename} ---\n${e.content}`).join("\n\n");
   }
 
   getStats(): {

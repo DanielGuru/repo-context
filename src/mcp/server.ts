@@ -89,7 +89,11 @@ export function buildSessionSummary(session: SessionTracker, durationSeconds: nu
 const CATEGORY_PATTERNS: Array<{ pattern: RegExp; category: string }> = [
   { pattern: /\b(why\b|chose|decision|alternatives?|trade.?off|instead of|reason\b)/, category: "decisions" },
   { pattern: /\b(bug|broke|regression|crash|error\b|fail|fix\b|issues?\b|problem|broken)/, category: "regressions" },
-  { pattern: /\b(prefer(?:red|ence|s)?|coding style|naming convention|indent(?:ation)?|lint(?:ing)?|tab(?:s|\s+vs|\s+or)|code format(?:ting)?)/, category: "preferences" },
+  {
+    pattern:
+      /\b(prefer(?:red|ence|s)?|coding style|naming convention|indent(?:ation)?|lint(?:ing)?|tab(?:s|\s+vs|\s+or)|code format(?:ting)?)/,
+    category: "preferences",
+  },
   { pattern: /\b(last session|previous session|yesterday|worked on|accomplished)/, category: "sessions" },
   { pattern: /\b(how does|how do|architecture|schema|database|api|endpoint|flow|structure)/, category: "facts" },
 ];
@@ -102,10 +106,7 @@ export function detectQueryCategory(query: string): string | undefined {
   return undefined;
 }
 
-export async function startMcpServer(
-  repoRoot: string,
-  config: RepoContextConfig
-): Promise<void> {
+export async function startMcpServer(repoRoot: string, config: RepoContextConfig): Promise<void> {
   const store = new ContextStore(repoRoot, config);
   let searchIndex: SearchIndex | null = null;
 
@@ -123,12 +124,7 @@ export async function startMcpServer(
 
   if (store.exists()) {
     try {
-      searchIndex = new SearchIndex(
-        store.path,
-        store,
-        embeddingProvider,
-        config.hybridAlpha
-      );
+      searchIndex = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
       await searchIndex.rebuild();
     } catch (e) {
       console.error("Warning: Could not initialize search index:", e);
@@ -146,12 +142,7 @@ export async function startMcpServer(
       if (!globalStore.exists()) {
         globalStore.scaffold();
       }
-      globalSearchIndex = new SearchIndex(
-        globalStore.path,
-        globalStore,
-        embeddingProvider,
-        config.hybridAlpha
-      );
+      globalSearchIndex = new SearchIndex(globalStore.path, globalStore, embeddingProvider, config.hybridAlpha);
       await globalSearchIndex.rebuild();
     } catch (e) {
       console.error("Warning: Could not initialize global context:", e);
@@ -199,7 +190,8 @@ export async function startMcpServer(
     prompts: [
       {
         name: "start-task",
-        description: "Search for relevant context before starting a new task. Use this at the beginning of every coding session.",
+        description:
+          "Search for relevant context before starting a new task. Use this at the beginning of every coding session.",
         arguments: [
           {
             name: "task",
@@ -210,7 +202,8 @@ export async function startMcpServer(
       },
       {
         name: "end-session",
-        description: "Record what you accomplished and discovered during this session. Routes conclusions to the right categories.",
+        description:
+          "Record what you accomplished and discovered during this session. Routes conclusions to the right categories.",
         arguments: [
           {
             name: "summary",
@@ -280,8 +273,7 @@ export async function startMcpServer(
               category: {
                 type: "string",
                 enum: VALID_CATEGORIES,
-                description:
-                  "Optional: filter results to a specific category. Omit to search all.",
+                description: "Optional: filter results to a specific category. Omit to search all.",
               },
               limit: {
                 type: "number",
@@ -333,8 +325,7 @@ export async function startMcpServer(
               },
               append: {
                 type: "boolean",
-                description:
-                  "If true, append to existing file instead of overwriting. Useful for session logs.",
+                description: "If true, append to existing file instead of overwriting. Useful for session logs.",
               },
               supersedes: {
                 type: "string",
@@ -344,7 +335,8 @@ export async function startMcpServer(
               scope: {
                 type: "string",
                 enum: ["repo", "global"],
-                description: "Where to store. Defaults: preferences\u2192global, everything else\u2192repo. Explicit override.",
+                description:
+                  "Where to store. Defaults: preferences\u2192global, everything else\u2192repo. Explicit override.",
               },
             },
             required: ["category", "filename", "content"],
@@ -488,7 +480,13 @@ export async function startMcpServer(
 
     switch (name) {
       case "context_search": {
-        const { query, category, limit = 5, detail = "compact", scope: explicitScope } = args as {
+        const {
+          query,
+          category,
+          limit = 5,
+          detail = "compact",
+          scope: explicitScope,
+        } = args as {
           query: string;
           category?: string;
           limit?: number;
@@ -502,20 +500,24 @@ export async function startMcpServer(
         // Guard: empty query
         if (!query || !query.trim()) {
           return {
-            content: [{
-              type: "text" as const,
-              text: "Empty search query. Use context_list to browse all entries, or provide a search term.",
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: "Empty search query. Use context_list to browse all entries, or provide a search term.",
+              },
+            ],
           };
         }
 
         // Validate category if provided
         if (category && !VALID_CATEGORIES.includes(category)) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -525,10 +527,12 @@ export async function startMcpServer(
 
         if (!repoExists && !globalExists) {
           return {
-            content: [{
-              type: "text" as const,
-              text: "No .context/ directory found. Tell the user to run:\n\n  npx repomemory go\n\nThis will set up persistent memory for this project.",
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: "No .context/ directory found. Tell the user to run:\n\n  npx repomemory go\n\nThis will set up persistent memory for this project.",
+              },
+            ],
           };
         }
 
@@ -556,7 +560,15 @@ export async function startMcpServer(
         }
 
         // Search repo
-        type TaggedResult = { category: string; filename: string; title: string; snippet: string; score: number; relativePath: string; source: string };
+        type TaggedResult = {
+          category: string;
+          filename: string;
+          title: string;
+          snippet: string;
+          score: number;
+          relativePath: string;
+          source: string;
+        };
         let repoResults: TaggedResult[] = [];
         if ((!explicitScope || explicitScope === "repo") && searchIndex) {
           const raw = await searchIndex.search(query, effectiveCategory, limit);
@@ -587,11 +599,17 @@ export async function startMcpServer(
         const merged: TaggedResult[] = [];
         for (const r of repoResults) {
           const key = `${r.category}/${r.filename}`;
-          if (!seen.has(key)) { seen.add(key); merged.push(r); }
+          if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(r);
+          }
         }
         for (const r of globalResults) {
           const key = `${r.category}/${r.filename}`;
-          if (!seen.has(key)) { seen.add(key); merged.push(r); }
+          if (!seen.has(key)) {
+            seen.add(key);
+            merged.push(r);
+          }
         }
         merged.sort((a, b) => b.score - a.score);
         const results = merged.slice(0, limit);
@@ -621,54 +639,85 @@ export async function startMcpServer(
 
           // Dedup and limit
           const seenFallback = new Set<string>();
-          const matched = fallbackEntries.filter((e) => {
-            const key = `${e.category}/${e.filename}`;
-            if (seenFallback.has(key)) return false;
-            seenFallback.add(key);
-            return true;
-          }).slice(0, limit);
+          const matched = fallbackEntries
+            .filter((e) => {
+              const key = `${e.category}/${e.filename}`;
+              if (seenFallback.has(key)) return false;
+              seenFallback.add(key);
+              return true;
+            })
+            .slice(0, limit);
 
           if (matched.length === 0) {
             return {
-              content: [{
-                type: "text" as const,
-                text: `No results found for "${query}"${category ? ` in ${category}` : ""}. Try a different query or browse with context_list.${getWriteNudge()}`,
-              }],
+              content: [
+                {
+                  type: "text" as const,
+                  text: `No results found for "${query}"${category ? ` in ${category}` : ""}. Try a different query or browse with context_list.${getWriteNudge()}`,
+                },
+              ],
             };
           }
 
           let text: string;
-          const sourceTag = (s: string) => globalStore ? ` \u2014 ${s}` : "";
+          const sourceTag = (s: string) => (globalStore ? ` \u2014 ${s}` : "");
           if (detail === "compact") {
-            text = routingNote + matched
-              .map((e) => `- **${e.title}** [${e.category}/${e.filename}${sourceTag(e.source)}] \u2014 ${e.snippet.slice(0, 150).replace(/\n/g, " ")}...`)
-              .join("\n");
+            text =
+              routingNote +
+              matched
+                .map(
+                  (e) =>
+                    `- **${e.title}** [${e.category}/${e.filename}${sourceTag(e.source)}] \u2014 ${e.snippet.slice(0, 150).replace(/\n/g, " ")}...`
+                )
+                .join("\n");
           } else {
-            text = routingNote + matched
-              .map((e) => `## ${e.category}/${e.filename}${sourceTag(e.source)}\n**${e.title}**\n\n${e.snippet.slice(0, 800)}\n`)
-              .join("\n---\n\n");
+            text =
+              routingNote +
+              matched
+                .map(
+                  (e) =>
+                    `## ${e.category}/${e.filename}${sourceTag(e.source)}\n**${e.title}**\n\n${e.snippet.slice(0, 800)}\n`
+                )
+                .join("\n---\n\n");
           }
           return { content: [{ type: "text" as const, text: text + getWriteNudge() }] };
         }
 
         // Format search results with source tags when global is active
-        const sourceTag = (s: string) => globalStore ? ` \u2014 ${s}` : "";
+        const sourceTag = (s: string) => (globalStore ? ` \u2014 ${s}` : "");
         let text: string;
         if (detail === "compact") {
-          text = routingNote + results
-            .map((r) => `- **${r.title}** [${r.category}/${r.filename}${sourceTag(r.source)}] (score: ${r.score.toFixed(2)}) \u2014 ${r.snippet.slice(0, 150).replace(/\n/g, " ")}...`)
-            .join("\n");
+          text =
+            routingNote +
+            results
+              .map(
+                (r) =>
+                  `- **${r.title}** [${r.category}/${r.filename}${sourceTag(r.source)}] (score: ${r.score.toFixed(2)}) \u2014 ${r.snippet.slice(0, 150).replace(/\n/g, " ")}...`
+              )
+              .join("\n");
         } else {
-          text = routingNote + results
-            .map((r) => `## ${r.category}/${r.filename}${sourceTag(r.source)} (relevance: ${r.score.toFixed(2)})\n**${r.title}**\n\n${r.snippet}\n`)
-            .join("\n---\n\n");
+          text =
+            routingNote +
+            results
+              .map(
+                (r) =>
+                  `## ${r.category}/${r.filename}${sourceTag(r.source)} (relevance: ${r.score.toFixed(2)})\n**${r.title}**\n\n${r.snippet}\n`
+              )
+              .join("\n---\n\n");
         }
 
         return { content: [{ type: "text" as const, text: text + getWriteNudge() }] };
       }
 
       case "context_write": {
-        const { category, filename, content, append = false, supersedes, scope: explicitScope } = args as {
+        const {
+          category,
+          filename,
+          content,
+          append = false,
+          supersedes,
+          scope: explicitScope,
+        } = args as {
           category: string;
           filename: string;
           content: string;
@@ -683,10 +732,12 @@ export async function startMcpServer(
         // Validate category
         if (!VALID_CATEGORIES.includes(category)) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -717,13 +768,14 @@ export async function startMcpServer(
         if (!append && targetIndex && content.length >= 100 && meaningfulWords.length >= 2) {
           try {
             const existing = await targetIndex.search(searchTerms, category, 3);
-            const maxScore = existing.length > 0 ? Math.max(...existing.map(r => r.score)) : 0;
+            const maxScore = existing.length > 0 ? Math.max(...existing.map((r) => r.score)) : 0;
             supersededList = existing
-              .filter((r) =>
-                r.category === category &&
-                r.filename !== filename + ".md" &&
-                r.filename !== filename &&
-                r.score > maxScore * 0.3
+              .filter(
+                (r) =>
+                  r.category === category &&
+                  r.filename !== filename + ".md" &&
+                  r.filename !== filename &&
+                  r.score > maxScore * 0.3
               )
               .map((d) => `${d.category}/${d.filename} (score: ${d.score.toFixed(1)})`);
           } catch {
@@ -743,9 +795,7 @@ export async function startMcpServer(
           // Construct the entry directly instead of scanning the whole category
           const fullContent = append ? (targetStore.readEntry(category, filename) ?? content) : content;
           const titleMatch = fullContent.match(/^#\s+(.+)$/m);
-          const title = titleMatch
-            ? titleMatch[1]
-            : filename.replace(/-/g, " ");
+          const title = titleMatch ? titleMatch[1] : filename.replace(/-/g, " ");
           const entry: ContextEntry = {
             category,
             filename: relativePath.split("/").pop() ?? filename + ".md",
@@ -772,15 +822,21 @@ export async function startMcpServer(
         }
 
         return {
-          content: [{
-            type: "text" as const,
-            text: responseText,
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: responseText,
+            },
+          ],
         };
       }
 
       case "context_delete": {
-        const { category, filename, scope: explicitScope } = args as {
+        const {
+          category,
+          filename,
+          scope: explicitScope,
+        } = args as {
           category: string;
           filename: string;
           scope?: "repo" | "global";
@@ -788,10 +844,12 @@ export async function startMcpServer(
 
         if (!VALID_CATEGORIES.includes(category)) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -820,10 +878,12 @@ export async function startMcpServer(
 
         if (!deleted) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `File not found: ${category}/${fname}. Use context_list to see available files.`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `File not found: ${category}/${fname}. Use context_list to see available files.`,
+              },
+            ],
           };
         }
 
@@ -835,15 +895,21 @@ export async function startMcpServer(
 
         const scopeTag = globalStore ? ` [${deleteScope}]` : "";
         return {
-          content: [{
-            type: "text" as const,
-            text: `\u2713 Deleted ${category}/${fname}${scopeTag}. Stale knowledge removed.`,
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: `\u2713 Deleted ${category}/${fname}${scopeTag}. Stale knowledge removed.`,
+            },
+          ],
         };
       }
 
       case "context_list": {
-        const { category, compact = true, scope: explicitScope } = (args || {}) as {
+        const {
+          category,
+          compact = true,
+          scope: explicitScope,
+        } = (args || {}) as {
           category?: string;
           compact?: boolean;
           scope?: "repo" | "global";
@@ -853,10 +919,12 @@ export async function startMcpServer(
 
         if (category && !VALID_CATEGORIES.includes(category)) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `Invalid category: ${category}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -866,10 +934,12 @@ export async function startMcpServer(
 
         if (!repoExists && !globalExists) {
           return {
-            content: [{
-              type: "text" as const,
-              text: "No .context/ directory found. Run `npx repomemory go` to set up.",
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: "No .context/ directory found. Run `npx repomemory go` to set up.",
+              },
+            ],
           };
         }
 
@@ -886,10 +956,12 @@ export async function startMcpServer(
 
         if (allEntries.length === 0) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `No entries found${category ? ` in ${category}` : ""}. Run \`npx repomemory analyze\` to populate, or use context_write to add entries.`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `No entries found${category ? ` in ${category}` : ""}. Run \`npx repomemory analyze\` to populate, or use context_write to add entries.`,
+              },
+            ],
           };
         }
 
@@ -900,7 +972,7 @@ export async function startMcpServer(
         }
 
         let text = "";
-        const sourceTag = (s: string) => globalStore ? ` [${s}]` : "";
+        const sourceTag = (s: string) => (globalStore ? ` [${s}]` : "");
         if (compact) {
           for (const [cat, catEntries] of Object.entries(grouped)) {
             text += `**${cat}/** (${catEntries.length})\n`;
@@ -926,7 +998,11 @@ export async function startMcpServer(
       }
 
       case "context_read": {
-        const { category, filename, scope: explicitScope } = args as {
+        const {
+          category,
+          filename,
+          scope: explicitScope,
+        } = args as {
           category: string;
           filename: string;
           scope?: "repo" | "global";
@@ -934,10 +1010,12 @@ export async function startMcpServer(
 
         if (!category || !VALID_CATEGORIES.includes(category)) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `Invalid category: ${category || "(empty)"}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `Invalid category: ${category || "(empty)"}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
+              },
+            ],
             isError: true,
           };
         }
@@ -961,19 +1039,23 @@ export async function startMcpServer(
 
         if (!content) {
           return {
-            content: [{
-              type: "text" as const,
-              text: `File not found: ${category}/${fname}. Use context_list to see available files.`,
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: `File not found: ${category}/${fname}. Use context_list to see available files.`,
+              },
+            ],
           };
         }
 
         const scopeTag = globalStore ? ` [${readScope}]` : "";
         return {
-          content: [{
-            type: "text" as const,
-            text: `# ${category}/${fname}${scopeTag}\n\n${content}`,
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: `# ${category}/${fname}${scopeTag}\n\n${content}`,
+            },
+          ],
         };
       }
 
@@ -983,10 +1065,12 @@ export async function startMcpServer(
 
         if (!repoExists && !globalExists) {
           return {
-            content: [{
-              type: "text" as const,
-              text: "No context found. The user needs to run:\n\n  npx repomemory go\n\nThis will set up persistent memory for this project.",
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: "No context found. The user needs to run:\n\n  npx repomemory go\n\nThis will set up persistent memory for this project.",
+              },
+            ],
           };
         }
 
@@ -1079,7 +1163,9 @@ export async function startMcpServer(
 
           if (staleEntries.length > 0) {
             parts.push("\n# Potentially Stale Entries\n");
-            parts.push("> These entries haven't been updated in 30+ days. They may still be accurate — verify before relying on them.\n");
+            parts.push(
+              "> These entries haven't been updated in 30+ days. They may still be accurate — verify before relying on them.\n"
+            );
             for (const e of staleEntries) {
               parts.push(`- ${e.category}/${e.filename}: ${e.title} (${getRelativeTime(e.lastModified)})`);
             }
@@ -1088,7 +1174,9 @@ export async function startMcpServer(
           // 6. Empty state warning
           const stats = store.getStats();
           if (stats.totalFiles === 0 || (stats.categories["facts"] || 0) === 0) {
-            parts.push("\n> **Note**: Context is mostly empty. Ask the user to run `npx repomemory analyze` to populate with architecture knowledge.");
+            parts.push(
+              "\n> **Note**: Context is mostly empty. Ask the user to run `npx repomemory analyze` to populate with architecture knowledge."
+            );
           }
         }
 
@@ -1098,10 +1186,12 @@ export async function startMcpServer(
 
       default:
         return {
-          content: [{
-            type: "text" as const,
-            text: `Unknown tool: ${name}`,
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Unknown tool: ${name}`,
+            },
+          ],
           isError: true,
         };
     }
@@ -1163,11 +1253,13 @@ export async function startMcpServer(
     }
 
     return {
-      contents: [{
-        uri,
-        mimeType: "text/markdown",
-        text: content,
-      }],
+      contents: [
+        {
+          uri,
+          mimeType: "text/markdown",
+          text: content,
+        },
+      ],
     };
   });
 

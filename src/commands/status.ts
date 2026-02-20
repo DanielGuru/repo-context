@@ -18,9 +18,7 @@ export async function statusCommand(options: { dir?: string }) {
 
   console.log(chalk.bold("\n\ud83d\udcca repomemory status\n"));
   console.log(`  ${chalk.cyan("Total files:")} ${stats.totalFiles}`);
-  console.log(
-    `  ${chalk.cyan("Total size:")} ${(stats.totalSize / 1024).toFixed(1)}KB`
-  );
+  console.log(`  ${chalk.cyan("Total size:")} ${(stats.totalSize / 1024).toFixed(1)}KB`);
   console.log(`  ${chalk.cyan("Provider:")} ${config.provider} (${config.model})`);
 
   // Freshness info
@@ -28,7 +26,9 @@ export async function statusCommand(options: { dir?: string }) {
     console.log(`  ${chalk.cyan("Last updated:")} ${formatAge(stats.newestFile.age)} (${stats.newestFile.path})`);
   }
   if (stats.stalestFile && stats.stalestFile.age > 30 * 24 * 60 * 60 * 1000) {
-    console.log(`  ${chalk.yellow("\u26a0 Stalest file:")} ${formatAge(stats.stalestFile.age)} (${stats.stalestFile.path})`);
+    console.log(
+      `  ${chalk.yellow("\u26a0 Stalest file:")} ${formatAge(stats.stalestFile.age)} (${stats.stalestFile.path})`
+    );
   }
 
   console.log();
@@ -49,7 +49,9 @@ export async function statusCommand(options: { dir?: string }) {
       const sizeKb = (entry.sizeBytes / 1024).toFixed(1);
       const age = formatAge(Date.now() - entry.lastModified.getTime());
       const staleMarker = isStale(entry.lastModified) ? chalk.yellow(" (stale)") : "";
-      console.log(`    ${chalk.dim("\u2022")} ${entry.filename} \u2014 ${entry.title} (${sizeKb}KB, ${age})${staleMarker}`);
+      console.log(
+        `    ${chalk.dim("\u2022")} ${entry.filename} \u2014 ${entry.title} (${sizeKb}KB, ${age})${staleMarker}`
+      );
     }
     console.log();
   }
@@ -66,7 +68,8 @@ export async function statusCommand(options: { dir?: string }) {
   if (decisionsCount === 0) suggestions.push("Document key architectural decisions in decisions/");
   if (regressionsCount === 0) suggestions.push("Record known gotchas in regressions/ to prevent repeat bugs");
   if (sessionsCount === 0) suggestions.push("AI agents can use context_write to record session summaries");
-  if (preferencesCount === 0) suggestions.push("Record coding preferences in preferences/ — helps agents match your style");
+  if (preferencesCount === 0)
+    suggestions.push("Record coding preferences in preferences/ — helps agents match your style");
 
   if (stats.stalestFile && stats.stalestFile.age > 90 * 24 * 60 * 60 * 1000) {
     suggestions.push("Some context files are >90 days old \u2014 run `repomemory analyze --merge` to refresh");

@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildSessionSummary,
-  detectQueryCategory,
-  getRelativeTime,
-} from "../src/mcp/server.js";
+import { buildSessionSummary, detectQueryCategory, getRelativeTime } from "../src/mcp/server.js";
 
 describe("detectQueryCategory", () => {
   it("routes 'why' queries to decisions", () => {

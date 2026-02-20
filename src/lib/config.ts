@@ -155,14 +155,8 @@ export function loadConfig(repoRoot: string): RepoContextConfig {
       ...userConfig,
       provider: userConfig.provider ?? DEFAULT_CONFIG.provider,
       model: userConfig.model ?? DEFAULT_CONFIG.model,
-      ignorePatterns: [
-        ...DEFAULT_CONFIG.ignorePatterns,
-        ...(userConfig.ignorePatterns || []),
-      ],
-      keyFilePatterns: [
-        ...DEFAULT_CONFIG.keyFilePatterns,
-        ...(userConfig.keyFilePatterns || []),
-      ],
+      ignorePatterns: [...DEFAULT_CONFIG.ignorePatterns, ...(userConfig.ignorePatterns || [])],
+      keyFilePatterns: [...DEFAULT_CONFIG.keyFilePatterns, ...(userConfig.keyFilePatterns || [])],
       categories: userConfig.categories || DEFAULT_CONFIG.categories,
       hybridAlpha: userConfig.hybridAlpha ?? DEFAULT_CONFIG.hybridAlpha,
       enableGlobalContext: userConfig.enableGlobalContext ?? DEFAULT_CONFIG.enableGlobalContext,

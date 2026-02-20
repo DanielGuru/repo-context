@@ -106,10 +106,7 @@ describe("Global Context Layer", () => {
 
       // Simulate merge logic (repo-first dedup)
       const seen = new Set(repoEntries.map((e) => `${e.category}/${e.filename}`));
-      const merged = [
-        ...repoEntries,
-        ...globalEntries.filter((e) => !seen.has(`${e.category}/${e.filename}`)),
-      ];
+      const merged = [...repoEntries, ...globalEntries.filter((e) => !seen.has(`${e.category}/${e.filename}`))];
 
       expect(merged.length).toBe(1);
       expect(merged[0].content).toContain("Bootstrap");
@@ -163,10 +160,7 @@ describe("Global Context Layer", () => {
       const repoPrefs = repoStore.listEntries("preferences");
 
       const seen = new Set(repoPrefs.map((p) => p.filename));
-      const merged = [
-        ...repoPrefs,
-        ...globalPrefs.filter((p) => !seen.has(p.filename)),
-      ];
+      const merged = [...repoPrefs, ...globalPrefs.filter((p) => !seen.has(p.filename))];
 
       expect(merged.length).toBe(1);
       expect(merged[0].content).toContain("Jest");

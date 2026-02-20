@@ -87,12 +87,7 @@ function resolveApiKeyForProvider(config: RepoContextConfig): string {
 }
 
 /** Estimate cost for a given provider/model/token count */
-export function estimateCost(
-  provider: string,
-  model: string,
-  inputTokens: number,
-  outputTokens: number
-): string {
+export function estimateCost(provider: string, model: string, inputTokens: number, outputTokens: number): string {
   // Approximate pricing per 1M tokens (as of 2025)
   const pricing: Record<string, { input: number; output: number }> = {
     "claude-sonnet-4-6": { input: 3, output: 15 },
@@ -156,12 +151,7 @@ async function createAnthropicProvider(apiKey: string, model: string): Promise<A
         };
       } catch (err) {
         const e = err as Error & { status?: number };
-        throw new AIError(
-          e.message,
-          "anthropic",
-          e.status,
-          e.status === 429 || e.status === 529 || e.status === 500
-        );
+        throw new AIError(e.message, "anthropic", e.status, e.status === 429 || e.status === 529 || e.status === 500);
       }
     },
   };
@@ -197,12 +187,7 @@ async function createOpenAIProvider(apiKey: string, model: string): Promise<AIPr
         };
       } catch (err) {
         const e = err as Error & { status?: number };
-        throw new AIError(
-          e.message,
-          "openai",
-          e.status,
-          e.status === 429 || e.status === 500
-        );
+        throw new AIError(e.message, "openai", e.status, e.status === 429 || e.status === 500);
       }
     },
   };
@@ -286,12 +271,7 @@ async function createGrokProvider(apiKey: string, model: string): Promise<AIProv
         };
       } catch (err) {
         const e = err as Error & { status?: number };
-        throw new AIError(
-          e.message,
-          "grok",
-          e.status,
-          e.status === 429 || e.status === 500
-        );
+        throw new AIError(e.message, "grok", e.status, e.status === 429 || e.status === 500);
       }
     },
   };

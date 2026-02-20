@@ -14,7 +14,9 @@ export async function serveCommand(options: { dir?: string }) {
   console.error(chalk.dim(`repomemory MCP server v${version}`));
   console.error(chalk.dim(`  Root: ${repoRoot}`));
   console.error(chalk.dim(`  Context: ${config.contextDir}/`));
-  console.error(chalk.dim(`  Tools: context_search, context_write, context_delete, context_list, context_read, context_auto_orient`));
+  console.error(
+    chalk.dim(`  Tools: context_search, context_write, context_delete, context_list, context_read, context_auto_orient`)
+  );
 
   await startMcpServer(repoRoot, config);
 }

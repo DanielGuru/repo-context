@@ -6,10 +6,7 @@ import { ContextStore } from "../lib/context-store.js";
 import { SearchIndex } from "../lib/search.js";
 import { getGitDiffSummary, getLastCommitHash } from "../lib/git.js";
 
-export async function syncCommand(options: {
-  dir?: string;
-  since?: string;
-}) {
+export async function syncCommand(options: { dir?: string; since?: string }) {
   const repoRoot = options.dir || process.cwd();
   const config = loadConfig(repoRoot);
   const store = new ContextStore(repoRoot, config);
@@ -72,9 +69,7 @@ export async function syncCommand(options: {
   let newCommitLines = commitLines;
 
   if (existingChangelog) {
-    const existingHashes = new Set(
-      [...existingChangelog.matchAll(/^([a-f0-9]{7,40})\s/gm)].map((m) => m[1])
-    );
+    const existingHashes = new Set([...existingChangelog.matchAll(/^([a-f0-9]{7,40})\s/gm)].map((m) => m[1]));
     newCommitLines = commitLines.filter((line) => {
       const hashMatch = line.match(/^([a-f0-9]{7,})\s/);
       return !hashMatch || !existingHashes.has(hashMatch[1]);

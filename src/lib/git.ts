@@ -58,16 +58,13 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
   const currentBranch = git(["branch", "--show-current"], repoRoot);
 
   // Detect default branch
-  let defaultBranch = git(
-    ["symbolic-ref", "refs/remotes/origin/HEAD", "--short"],
-    repoRoot
-  ).replace(/^origin\//, "");
+  let defaultBranch = git(["symbolic-ref", "refs/remotes/origin/HEAD", "--short"], repoRoot).replace(/^origin\//, "");
 
   if (!defaultBranch) {
     const branches = git(["branch", "-a"], repoRoot);
-    const branchList = branches.split("\n").map(b => b.trim().replace(/^\* /, ""));
-    if (branchList.some(b => b === "main" || b === "origin/main")) defaultBranch = "main";
-    else if (branchList.some(b => b === "master" || b === "origin/master")) defaultBranch = "master";
+    const branchList = branches.split("\n").map((b) => b.trim().replace(/^\* /, ""));
+    if (branchList.some((b) => b === "main" || b === "origin/main")) defaultBranch = "main";
+    else if (branchList.some((b) => b === "master" || b === "origin/master")) defaultBranch = "master";
     else defaultBranch = currentBranch;
   }
 
@@ -76,30 +73,19 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
   const totalCommits = parseInt(totalCommitsStr) || 0;
 
   // Contributors (limit to 20 in JS, not with head)
-  const contributorLines = git(
-    ["shortlog", "-sn", "--no-merges", "HEAD"],
-    repoRoot
-  );
+  const contributorLines = git(["shortlog", "-sn", "--no-merges", "HEAD"], repoRoot);
   const contributors = contributorLines
     .split("\n")
     .filter(Boolean)
     .slice(0, 20)
     .map((line) => {
       const match = line.trim().match(/^(\d+)\s+(.+)$/);
-      return match
-        ? { name: match[2], commits: parseInt(match[1]) }
-        : { name: line.trim(), commits: 0 };
+      return match ? { name: match[2], commits: parseInt(match[1]) } : { name: line.trim(), commits: 0 };
     });
 
   // Recent commits with stats
   const commitLog = git(
-    [
-      "log",
-      `--format=%H%x00%h%x00%an%x00%ai%x00%s`,
-      "--shortstat",
-      "-n",
-      String(maxCommits),
-    ],
+    ["log", `--format=%H%x00%h%x00%an%x00%ai%x00%s`, "--shortstat", "-n", String(maxCommits)],
     repoRoot
   );
 
@@ -151,23 +137,15 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
   }
 
   // Active branches (limit in JS)
-  const branchOutput = git(
-    ["branch", "-a", "--sort=-committerdate", "--format=%(refname:short)"],
-    repoRoot
-  );
+  const branchOutput = git(["branch", "-a", "--sort=-committerdate", "--format=%(refname:short)"], repoRoot);
   const activeBranches = branchOutput.split("\n").filter(Boolean).slice(0, 15);
 
   // Last tag
   const lastTagOrRelease = git(["describe", "--tags", "--abbrev=0"], repoRoot);
 
   // Commit frequency
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-  const recentCount = git(
-    ["rev-list", "--count", `--after=${thirtyDaysAgo}`, "HEAD"],
-    repoRoot
-  );
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const recentCount = git(["rev-list", "--count", `--after=${thirtyDaysAgo}`, "HEAD"], repoRoot);
   const commitsPerMonth = parseInt(recentCount) || 0;
   let commitFrequency = "inactive";
   if (commitsPerMonth > 100) commitFrequency = "very active (100+/month)";
@@ -190,17 +168,11 @@ export function getGitInfo(repoRoot: string, maxCommits: number): GitInfo {
 }
 
 export function getGitDiffSummary(repoRoot: string, since: string): string {
-  return git(
-    ["log", `--since=${since}`, "--format=%h %s (%an, %ar)", "--no-merges"],
-    repoRoot
-  );
+  return git(["log", `--since=${since}`, "--format=%h %s (%an, %ar)", "--no-merges"], repoRoot);
 }
 
 export function getRecentDiffs(repoRoot: string, count: number): string {
-  return git(
-    ["log", `-${count}`, "--no-merges", "--format=--- %h: %s ---", "--stat"],
-    repoRoot
-  );
+  return git(["log", `-${count}`, "--no-merges", "--format=--- %h: %s ---", "--stat"], repoRoot);
 }
 
 export function getLastCommitHash(repoRoot: string): string {

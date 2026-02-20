@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.7.0 (2026-02-20)
+
+### New Features
+- **`repomemory doctor`** — Diagnostics command with config/API-key checks, `.context` integrity, search index health probe, MCP setup checks, JSON output (`--json`), and support bundle (`--output`)
+- **Non-interactive setup** — `go` and `wizard` now support `--yes` / `--defaults` / `--no-prompt` flags for deterministic CI-safe usage
+  - Additional flags: `--max-files`, `--embedding-provider none`, `--tools`, `--skip-analyze`
+
+### Improvements
+- **Dashboard optimization** — `/api/entries` now supports pagination (`offset`/`limit`), compact payload mode (`compact=1`), metadata-only mode (`meta=1`), and ETag-based conditional requests
+- **Dashboard polling** — Replaced full-payload polling with lightweight metadata polling + revision-based refresh
+- **Release consistency** — `npm run sync:versions` keeps `server.json` aligned with `package.json`; `npm run check:release` validates version parity and changelog presence
+- **CI workflows** — Updated CI with lint/typecheck, release consistency checks, and E2E smoke tests
+- **`server.json` synced** — Was stuck at 1.3.0, now auto-synced to package version
+
+### Testing
+- **MCP contract tests** — Real client/server integration tests covering list/read/write/delete/search/orient and repo/global scope routing
+- **CLI E2E smoke tests** — `go --yes`, `doctor --json`, `setup cursor`, `status`, `search`
+- **Release scripts** — `check:release` and `sync:versions` prevent version drift
+
 ## 1.1.1 (2026-02-18)
 
 ### Security
