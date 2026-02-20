@@ -177,7 +177,7 @@ export async function doctorCommand(options: { dir?: string; json?: boolean; out
         // Keyword-only
       }
 
-      const index = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
+      const index = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha, config.maxEmbeddingChars);
       await index.rebuild();
       const probe = await index.search("architecture", undefined, 1);
       const stats = await index.getStats();

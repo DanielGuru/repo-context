@@ -1,5 +1,14 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, unlinkSync } from "fs";
-import { join, relative, basename } from "path";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  realpathSync,
+} from "fs";
+import { join, relative, basename, resolve } from "path";
 import type { RepoContextConfig } from "./config.js";
 
 export interface ContextEntry {
@@ -26,10 +35,9 @@ export class ContextStore {
    * Used for the global context store at ~/.repomemory/global/.
    */
   static forAbsolutePath(absoluteDir: string): ContextStore {
-    const instance = Object.create(ContextStore.prototype) as ContextStore;
-    (instance as any).root = absoluteDir;
-    (instance as any).contextDir = absoluteDir;
-    return instance;
+    // Use a minimal config that points both root and contextDir to the same absolute path
+    const store = new ContextStore(absoluteDir, { contextDir: "." } as any);
+    return store;
   }
 
   get path(): string {
@@ -105,6 +113,15 @@ export class ContextStore {
     }
   }
 
+  /** Defense-in-depth: ensure resolved path stays within the context directory */
+  private assertPathContainment(filePath: string): void {
+    const resolved = resolve(filePath);
+    const contextRoot = resolve(this.contextDir);
+    if (!resolved.startsWith(contextRoot + "/") && resolved !== contextRoot) {
+      throw new Error(`Path traversal blocked: ${filePath} escapes ${this.contextDir}`);
+    }
+  }
+
   writeEntry(category: string, filename: string, content: string): string {
     this.validateCategory(category);
 
@@ -113,6 +130,7 @@ export class ContextStore {
 
     const sanitized = this.sanitizeFilename(filename);
     const filePath = join(dir, sanitized);
+    this.assertPathContainment(filePath);
     writeFileSync(filePath, content);
 
     return relative(this.root, filePath);
@@ -126,6 +144,7 @@ export class ContextStore {
 
     const sanitized = this.sanitizeFilename(filename);
     const filePath = join(dir, sanitized);
+    this.assertPathContainment(filePath);
     let existing = "";
     if (existsSync(filePath)) {
       existing = readFileSync(filePath, "utf-8");
@@ -139,6 +158,7 @@ export class ContextStore {
     this.validateCategory(category);
     const sanitized = this.sanitizeFilename(filename);
     const filePath = join(this.contextDir, category, sanitized);
+    this.assertPathContainment(filePath);
     if (!existsSync(filePath)) return false;
 
     unlinkSync(filePath);
@@ -149,6 +169,7 @@ export class ContextStore {
     this.validateCategory(category);
     const sanitized = this.sanitizeFilename(filename);
     const filePath = join(this.contextDir, category, sanitized);
+    this.assertPathContainment(filePath);
     if (!existsSync(filePath)) return null;
     return readFileSync(filePath, "utf-8");
   }

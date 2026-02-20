@@ -22,6 +22,7 @@ const ConfigFileSchema = z.object({
   embeddingModel: z.string().optional(),
   embeddingApiKey: z.string().optional(),
   hybridAlpha: z.number().min(0).max(1).optional(),
+  maxEmbeddingChars: z.number().positive().optional(),
   enableGlobalContext: z.boolean().optional(),
   globalContextDir: z.string().optional(),
 });
@@ -44,6 +45,7 @@ export interface RepoContextConfig {
   embeddingModel?: string;
   embeddingApiKey?: string;
   hybridAlpha: number;
+  maxEmbeddingChars: number;
   enableGlobalContext: boolean;
   globalContextDir: string;
 }
@@ -119,6 +121,7 @@ export const DEFAULT_CONFIG: RepoContextConfig = {
   autoIndex: true,
   contextDir: ".context",
   hybridAlpha: 0.5,
+  maxEmbeddingChars: 8000,
   enableGlobalContext: true,
   globalContextDir: "~/.repomemory/global",
 };

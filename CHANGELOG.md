@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.9.0 (2026-02-20)
+
+### Security
+- **Path containment guard** — `assertPathContainment()` defense-in-depth check on all context store read/write/delete/append operations; blocks path traversal even if category validation is bypassed
+- **API key redaction** — `redactError()` strips API keys from error messages before debug logging (`REPOMEMORY_DEBUG=1`); covers OpenAI `sk-*`, Gemini `AIza*`, Bearer tokens, and query params
+
+### New Features
+- **`search --json`** — machine-readable JSON output for CLI search results
+- **`maxEmbeddingChars`** — configurable in `.repomemory.json` (default: 8000); controls max content length sent to embedding API
+
+### Improvements
+- **Object.create hack removed** — `ContextStore.forAbsolutePath()` now uses clean constructor instead of prototype manipulation
+- **Score clamping** — hybrid merge clamps normalized keyword/semantic scores to [0, 1] via `Math.max(0, Math.min(1, ...))`
+- **dirty flag consistency** — `SearchIndex.save()` resets dirty flag; `rebuild()` sets it; `close()` only saves when needed
+- **Embedding error visibility** — embedding failures logged with redacted error details when `REPOMEMORY_DEBUG=1`
+
 ## 1.8.1 (2026-02-20)
 
 ### Fixes

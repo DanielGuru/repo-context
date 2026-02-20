@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { ContextStore, ContextEntry } from "./context-store.js";
 import type { EmbeddingProvider } from "./embeddings.js";
-import { cosineSimilarity } from "./embeddings.js";
+import { cosineSimilarity, redactError } from "./embeddings.js";
 
 export interface SearchResult {
   category: string;
@@ -278,6 +278,7 @@ export class SearchIndex {
 
     // Invalidate in-memory cache so next semantic query reloads fresh embeddings
     this.embeddingCacheDirty = true;
+    this.dirty = true;
 
     this.save();
   }
@@ -324,8 +325,11 @@ export class SearchIndex {
             batch[j].filename,
           ]);
         }
-      } catch {
+      } catch (err) {
         // Skip this batch's embedding failures — keyword search still works
+        if (process.env.REPOMEMORY_DEBUG) {
+          console.error(`[debug] Embedding batch failed: ${redactError(err)}`);
+        }
         continue;
       }
     }
@@ -352,8 +356,10 @@ export class SearchIndex {
         const [embedding] = await this.embeddingProvider.embed([textToEmbed]);
         embeddingBlob = new Uint8Array(embedding.buffer, embedding.byteOffset, embedding.byteLength);
         dims = this.embeddingProvider.dimensions;
-      } catch {
-        // Silently fall back to keyword-only for this entry
+      } catch (err) {
+        if (process.env.REPOMEMORY_DEBUG) {
+          console.error(`[debug] Embedding failed for ${entry.category}/${entry.filename}: ${redactError(err)}`);
+        }
       }
     }
 
@@ -749,6 +755,7 @@ export class SearchIndex {
     try {
       const data = this.db.export();
       writeFileSync(this.dbPath, Buffer.from(data));
+      this.dirty = false;
     } catch (e) {
       console.error("Warning: Could not save search index:", e);
     }

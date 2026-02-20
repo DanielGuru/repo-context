@@ -86,6 +86,7 @@ program
   .option("-l, --limit <n>", "Max results to return", "10")
   .option("--detail <level>", "Output detail: compact or full", "compact")
   .option("--explain", "Show keyword vs semantic score breakdown", false)
+  .option("--json", "Output results as JSON", false)
   .action(searchCommand);
 
 program

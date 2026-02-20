@@ -10,6 +10,16 @@ export interface EmbeddingConfig {
   apiKey?: string;
 }
 
+/** Redact API keys and sensitive data from error messages before logging */
+export function redactError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg
+    .replace(/sk-[a-zA-Z0-9_-]{10,}/g, "sk-***")
+    .replace(/AIza[A-Za-z0-9_-]{10,}/g, "AIza***")
+    .replace(/key=[^&\s]{10,}/gi, "key=***")
+    .replace(/Bearer\s+[^\s]{10,}/gi, "Bearer ***");
+}
+
 /**
  * Compute cosine similarity between two vectors.
  * Returns a value between -1 and 1 (1 = identical, 0 = orthogonal).

@@ -6,7 +6,7 @@ import { createEmbeddingProvider } from "../lib/embeddings.js";
 
 export async function searchCommand(
   query: string,
-  options: { dir?: string; category?: string; limit?: string; detail?: string; explain?: boolean }
+  options: { dir?: string; category?: string; limit?: string; detail?: string; explain?: boolean; json?: boolean }
 ) {
   const repoRoot = options.dir || process.cwd();
   const config = loadConfig(repoRoot);
@@ -34,7 +34,13 @@ export async function searchCommand(
   }
 
   // Build repo search index
-  const searchIndex = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
+  const searchIndex = new SearchIndex(
+    store.path,
+    store,
+    embeddingProvider,
+    config.hybridAlpha,
+    config.maxEmbeddingChars
+  );
   await searchIndex.rebuild();
 
   // Also search global context if enabled
@@ -44,7 +50,13 @@ export async function searchCommand(
       const globalDir = resolveGlobalDir(config);
       const globalStore = ContextStore.forAbsolutePath(globalDir);
       if (globalStore.exists()) {
-        globalIndex = new SearchIndex(globalStore.path, globalStore, embeddingProvider, config.hybridAlpha);
+        globalIndex = new SearchIndex(
+          globalStore.path,
+          globalStore,
+          embeddingProvider,
+          config.hybridAlpha,
+          config.maxEmbeddingChars
+        );
         await globalIndex.rebuild();
       }
     } catch {
@@ -79,8 +91,35 @@ export async function searchCommand(
   const results = merged.slice(0, limit);
 
   if (results.length === 0) {
-    console.log(chalk.yellow(`No results for "${query}".`));
+    if (options.json) {
+      console.log(JSON.stringify([]));
+    } else {
+      console.log(chalk.yellow(`No results for "${query}".`));
+    }
+    searchIndex.close();
+    if (globalIndex) globalIndex.close();
     process.exit(0);
+  }
+
+  if (options.json) {
+    console.log(
+      JSON.stringify(
+        results.map((r) => ({
+          category: r.category,
+          filename: r.filename,
+          title: r.title,
+          score: r.score,
+          source: r.source,
+          snippet: r.snippet,
+          ...(r.explain ? { explain: r.explain } : {}),
+        })),
+        null,
+        2
+      )
+    );
+    searchIndex.close();
+    if (globalIndex) globalIndex.close();
+    return;
   }
 
   console.log(chalk.bold(`\n${results.length} result${results.length === 1 ? "" : "s"} for "${query}"\n`));

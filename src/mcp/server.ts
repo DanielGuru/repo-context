@@ -124,7 +124,7 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
 
   if (store.exists()) {
     try {
-      searchIndex = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
+      searchIndex = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha, config.maxEmbeddingChars);
       await searchIndex.rebuild();
     } catch (e) {
       console.error("Warning: Could not initialize search index:", e);
@@ -142,7 +142,13 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
       if (!globalStore.exists()) {
         globalStore.scaffold();
       }
-      globalSearchIndex = new SearchIndex(globalStore.path, globalStore, embeddingProvider, config.hybridAlpha);
+      globalSearchIndex = new SearchIndex(
+        globalStore.path,
+        globalStore,
+        embeddingProvider,
+        config.hybridAlpha,
+        config.maxEmbeddingChars
+      );
       await globalSearchIndex.rebuild();
     } catch (e) {
       console.error("Warning: Could not initialize global context:", e);
@@ -545,13 +551,25 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
 
         // Lazy-init repo search index
         if (repoExists && !searchIndex) {
-          searchIndex = new SearchIndex(store.path, store, embeddingProvider, config.hybridAlpha);
+          searchIndex = new SearchIndex(
+            store.path,
+            store,
+            embeddingProvider,
+            config.hybridAlpha,
+            config.maxEmbeddingChars
+          );
           await searchIndex.rebuild();
         }
 
         // Lazy-init global search index
         if (globalExists && globalStore && !globalSearchIndex) {
-          globalSearchIndex = new SearchIndex(globalStore.path, globalStore, embeddingProvider, config.hybridAlpha);
+          globalSearchIndex = new SearchIndex(
+            globalStore.path,
+            globalStore,
+            embeddingProvider,
+            config.hybridAlpha,
+            config.maxEmbeddingChars
+          );
           await globalSearchIndex.rebuild();
         }
 
