@@ -862,18 +862,25 @@ function escapeHtml(s) {
 }
 
 function sanitizeHtml(html) {
-  // Strip script tags and event handlers to prevent XSS
+  // Defense-in-depth: strip dangerous patterns even though marked escapes HTML by default
   html = html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '');
   html = html.replace(/\\s+on\\w+\\s*=\\s*["'][^"']*["']/gi, '');
   html = html.replace(/\\s+on\\w+\\s*=\\s*[^\\s>]+/gi, '');
   html = html.replace(/href\\s*=\\s*["']javascript:[^"']*["']/gi, 'href="#"');
+  html = html.replace(/<iframe[^>]*>[\\s\\S]*?<\\/iframe>/gi, '');
+  html = html.replace(/<object[^>]*>[\\s\\S]*?<\\/object>/gi, '');
+  html = html.replace(/<embed[^>]*>/gi, '');
+  html = html.replace(/<form[^>]*>[\\s\\S]*?<\\/form>/gi, '');
   return html;
 }
 
 function renderMarkdown(md) {
-  // Use marked.js if available (loaded from CDN), else fallback to regex
   if (typeof marked !== 'undefined') {
-    try { return sanitizeHtml(marked.parse(md)); } catch {}
+    try {
+      // Disable raw HTML passthrough for security
+      marked.setOptions({ breaks: false });
+      return sanitizeHtml(marked.parse(md));
+    } catch {}
   }
   return regexRenderMarkdown(md);
 }

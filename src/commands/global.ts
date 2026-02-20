@@ -1,9 +1,10 @@
 import chalk from "chalk";
 import { ContextStore } from "../lib/context-store.js";
-import { DEFAULT_CONFIG, resolveGlobalDir } from "../lib/config.js";
+import { loadConfig, resolveGlobalDir } from "../lib/config.js";
 
 function getGlobalStore(): ContextStore {
-  const globalDir = resolveGlobalDir(DEFAULT_CONFIG);
+  const config = loadConfig(process.cwd());
+  const globalDir = resolveGlobalDir(config);
   const store = ContextStore.forAbsolutePath(globalDir);
   if (!store.exists()) {
     store.scaffold();

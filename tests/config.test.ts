@@ -24,7 +24,6 @@ describe("loadConfig", () => {
     expect(config.maxFilesForAnalysis).toBe(80);
     expect(config.maxGitCommits).toBe(100);
     expect(config.autoIndex).toBe(true);
-    expect(config.categories).toEqual(["facts", "decisions", "regressions", "sessions", "changelog", "preferences"]);
   });
 
   it("returns a copy of defaults (not the same reference)", () => {
@@ -119,16 +118,6 @@ describe("loadConfig", () => {
     expect(config.keyFilePatterns).toContain("package.json");
     expect(config.keyFilePatterns).toContain("custom-config.yaml");
     expect(config.keyFilePatterns.length).toBe(DEFAULT_CONFIG.keyFilePatterns.length + 1);
-  });
-
-  it("categories are replaced (not additive) when specified by user", () => {
-    const userConfig = {
-      categories: ["notes", "todos"],
-    };
-    writeFileSync(join(tempDir, ".repomemory.json"), JSON.stringify(userConfig));
-
-    const config = loadConfig(tempDir);
-    expect(config.categories).toEqual(["notes", "todos"]);
   });
 
   it("accepts all valid provider values", () => {

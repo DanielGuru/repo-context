@@ -791,21 +791,13 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
         }
 
         // Incremental index update (not full rebuild)
+        // Use actual filesystem entry to get correct mtime (avoids embedding churn on rebuild)
         if (targetIndex) {
-          // Construct the entry directly instead of scanning the whole category
-          const fullContent = append ? (targetStore.readEntry(category, filename) ?? content) : content;
-          const titleMatch = fullContent.match(/^#\s+(.+)$/m);
-          const title = titleMatch ? titleMatch[1] : filename.replace(/-/g, " ");
-          const entry: ContextEntry = {
-            category,
-            filename: relativePath.split("/").pop() ?? filename + ".md",
-            title,
-            content: fullContent,
-            relativePath,
-            lastModified: new Date(),
-            sizeBytes: Buffer.byteLength(fullContent, "utf-8"),
-          };
-          await targetIndex.indexEntry(entry);
+          const entries = targetStore.listEntries(category);
+          const actualEntry = entries.find((e) => e.relativePath === relativePath);
+          if (actualEntry) {
+            await targetIndex.indexEntry(actualEntry);
+          }
         }
 
         const scopeTag = globalStore ? ` [${targetScope}]` : "";
@@ -1204,6 +1196,8 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
 
     if (store.exists()) {
       for (const entry of store.listEntries()) {
+        // Skip root entries (e.g. index.md) — they aren't readable via ReadResource
+        if (!VALID_CATEGORIES.includes(entry.category)) continue;
         resources.push({
           uri: `repomemory://${entry.category}/${entry.filename}`,
           name: `${entry.category}/${entry.filename}`,
@@ -1215,6 +1209,7 @@ export async function startMcpServer(repoRoot: string, config: RepoContextConfig
 
     if (globalStore?.exists()) {
       for (const entry of globalStore.listEntries()) {
+        if (!VALID_CATEGORIES.includes(entry.category)) continue;
         resources.push({
           uri: `repomemory-global://${entry.category}/${entry.filename}`,
           name: `[global] ${entry.category}/${entry.filename}`,

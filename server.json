@@ -2,14 +2,17 @@
   "$schema": "https://registry.modelcontextprotocol.io/schema/server.json",
   "name": "io.github.DanielGuru/repomemory",
   "description": "Persistent, structured memory for AI coding agents. Hybrid keyword + semantic search, auto-session capture, intelligent category routing. Your codebase never forgets.",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "packages": [
     {
       "registry": "npm",
       "name": "repomemory",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "runtime": "node",
-      "args": ["dist/index.js", "serve"]
+      "args": [
+        "dist/index.js",
+        "serve"
+      ]
     }
   ],
   "repository": {
@@ -43,8 +46,21 @@
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "categories": ["memory", "coding-agents", "knowledge-base"],
-      "tags": ["ai-memory", "context-engineering", "mcp", "claude-code", "cursor", "copilot", "semantic-search", "embeddings"]
+      "categories": [
+        "memory",
+        "coding-agents",
+        "knowledge-base"
+      ],
+      "tags": [
+        "ai-memory",
+        "context-engineering",
+        "mcp",
+        "claude-code",
+        "cursor",
+        "copilot",
+        "semantic-search",
+        "embeddings"
+      ]
     }
   }
 }

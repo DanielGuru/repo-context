@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.1 (2026-02-20)
+
+### Fixes
+- **MCP resources contract** — `root/index.md` was listed via `ListResources` but rejected by `ReadResource`; now filtered from listing
+- **Node engine floor** — bumped `engines` to `>=20` to match `commander@14` requirement; updated CONTRIBUTING.md and AGENTS.md
+- **Embedding churn** — `context_write` incremental indexing used `new Date()` instead of filesystem mtime, causing unnecessary re-embedding on rebuild
+- **Dashboard sanitizer** — added `iframe/object/embed/form` stripping and explicit marked.js config for defense-in-depth
+- **`global` CLI config** — now reads `.repomemory.json` from cwd instead of hardcoded defaults, respecting custom `globalContextDir`
+- **Config `categories` field** — removed unused schema field that appeared configurable but was hardcoded everywhere
+- **Scanner ignore matching** — `shouldIgnore()` now tests full relative paths, not just basenames; path-based gitignore patterns work correctly
+
 ## 1.7.0 (2026-02-20)
 
 ### New Features

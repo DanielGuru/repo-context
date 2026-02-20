@@ -7,7 +7,7 @@
 **repomemory** is a CLI tool + MCP server that gives AI coding agents persistent memory for repositories. It creates a `.context/` directory with structured knowledge (facts, decisions, regressions, preferences, session logs) that agents can search, write to, and delete from. Features hybrid keyword + semantic search, auto-session capture, intelligent category routing, auto-purge detection, and global developer context (`~/.repomemory/global/`) that follows you across all repos.
 
 **Language:** TypeScript (ESM, strict mode)
-**Runtime:** Node.js 18+
+**Runtime:** Node.js 20+
 **Package manager:** npm
 **Build:** `npm run build` (runs tsc + shebang injection via `scripts/build.js`)
 **Test:** `npm test` (vitest, 163 tests)

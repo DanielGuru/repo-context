@@ -106,7 +106,7 @@ function loadGitignorePatterns(repoRoot: string): string[] {
   }
 }
 
-function shouldIgnore(name: string, ignorePatterns: string[]): boolean {
+function shouldIgnore(name: string, ignorePatterns: string[], relativePath?: string): boolean {
   return ignorePatterns.some((pattern) => {
     // Strip leading /
     const p = pattern.startsWith("/") ? pattern.slice(1) : pattern;
@@ -115,7 +115,12 @@ function shouldIgnore(name: string, ignorePatterns: string[]): boolean {
       const regex = new RegExp(
         "^" + p.replace(/\./g, "\\.").replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*").replace(/\?/g, ".") + "$"
       );
-      return regex.test(name);
+      // Test both basename and full relative path for path-aware matching
+      return regex.test(name) || (relativePath != null && regex.test(relativePath));
+    }
+    // For patterns with /, match against full path; for simple names, match basename
+    if (p.includes("/") && relativePath != null) {
+      return relativePath === p || relativePath.startsWith(p + "/");
     }
     return name === p;
   });
@@ -164,9 +169,10 @@ export function scanRepo(root: string, config: RepoContextConfig): RepoScan {
       return;
     }
 
-    const filtered = entries.filter(
-      (e) => !shouldIgnore(e, allIgnorePatterns) && (!e.startsWith(".") || ALLOWED_DOTDIRS.has(e))
-    );
+    const filtered = entries.filter((e) => {
+      const relPath = relative(root, join(dir, e));
+      return !shouldIgnore(e, allIgnorePatterns, relPath) && (!e.startsWith(".") || ALLOWED_DOTDIRS.has(e));
+    });
 
     filtered.forEach((entry, idx) => {
       const fullPath = join(dir, entry);

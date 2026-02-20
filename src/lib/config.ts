@@ -16,7 +16,6 @@ const ConfigFileSchema = z.object({
   maxFileSize: z.number().positive().optional(),
   maxFilesForAnalysis: z.number().positive().optional(),
   maxGitCommits: z.number().positive().optional(),
-  categories: z.array(z.string()).optional(),
   autoIndex: z.boolean().optional(),
   contextDir: z.string().optional(),
   embeddingProvider: EmbeddingProviderSchema.optional(),
@@ -39,7 +38,6 @@ export interface RepoContextConfig {
   maxFileSize: number;
   maxFilesForAnalysis: number;
   maxGitCommits: number;
-  categories: string[];
   autoIndex: boolean;
   contextDir: string;
   embeddingProvider?: EmbeddingProvider;
@@ -118,7 +116,6 @@ export const DEFAULT_CONFIG: RepoContextConfig = {
   maxFileSize: 100_000,
   maxFilesForAnalysis: 80,
   maxGitCommits: 100,
-  categories: ["facts", "decisions", "regressions", "sessions", "changelog", "preferences"],
   autoIndex: true,
   contextDir: ".context",
   hybridAlpha: 0.5,
@@ -157,7 +154,6 @@ export function loadConfig(repoRoot: string): RepoContextConfig {
       model: userConfig.model ?? DEFAULT_CONFIG.model,
       ignorePatterns: [...DEFAULT_CONFIG.ignorePatterns, ...(userConfig.ignorePatterns || [])],
       keyFilePatterns: [...DEFAULT_CONFIG.keyFilePatterns, ...(userConfig.keyFilePatterns || [])],
-      categories: userConfig.categories || DEFAULT_CONFIG.categories,
       hybridAlpha: userConfig.hybridAlpha ?? DEFAULT_CONFIG.hybridAlpha,
       enableGlobalContext: userConfig.enableGlobalContext ?? DEFAULT_CONFIG.enableGlobalContext,
       globalContextDir: userConfig.globalContextDir ?? DEFAULT_CONFIG.globalContextDir,
