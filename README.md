@@ -21,7 +21,7 @@ npx repomemory go
 
 <div align="center">
 
-https://github.com/DanielGuru/repomemory/raw/main/repomemory-demo.gif.mp4
+<video src="https://github.com/DanielGuru/repomemory/raw/main/repomemory-demo.gif.mp4" width="100%" autoplay loop muted playsinline></video>
 
 </div>
 
