@@ -43,13 +43,10 @@ function setupClaude(repoRoot: string) {
     try {
       config = JSON.parse(readFileSync(configPath, "utf-8"));
     } catch {
-      console.log(chalk.red("\u2717 Could not parse ~/.claude.json. Is Claude Code installed?"));
-      process.exit(1);
+      throw new Error("Could not parse ~/.claude.json. Is Claude Code installed?");
     }
   } else {
-    console.log(chalk.red("\u2717 ~/.claude.json not found. Install Claude Code first."));
-    console.log(chalk.dim("  https://docs.anthropic.com/en/docs/claude-code"));
-    process.exit(1);
+    throw new Error("~/.claude.json not found. Install Claude Code first.");
   }
 
   const mcpServers = (config.mcpServers || {}) as Record<string, unknown>;
