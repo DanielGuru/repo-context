@@ -144,6 +144,7 @@ export async function wizardCommand(options: {
   // Step 2: Provider
   const detectedProviders = detectProviders();
   let selectedProvider = options.provider;
+  let cursorOnlyMode = false;
 
   if (!selectedProvider) {
     if (detectedProviders.length >= 1) {
@@ -181,11 +182,18 @@ export async function wizardCommand(options: {
 
       const provider = await p.select({
         message: "Which AI provider will you use?",
-        options: Object.entries(PROVIDER_INFO).map(([key, info]) => ({
-          value: key,
-          label: info.label,
-          hint: info.hint,
-        })),
+        options: [
+          ...Object.entries(PROVIDER_INFO).map(([key, info]) => ({
+            value: key,
+            label: info.label,
+            hint: info.hint,
+          })),
+          {
+            value: "__cursor__",
+            label: "None — I use Cursor / another AI editor",
+            hint: "Let your editor's AI populate context via MCP",
+          },
+        ],
       });
 
       if (p.isCancel(provider)) {
@@ -193,9 +201,15 @@ export async function wizardCommand(options: {
         process.exit(0);
       }
 
-      selectedProvider = provider as string;
-      const info = PROVIDER_INFO[selectedProvider];
-      p.log.info(`Set your API key:\n  ${chalk.cyan(`export ${info.envVar}=your-key-here`)}`);
+      if (provider === "__cursor__") {
+        cursorOnlyMode = true;
+        selectedProvider = "anthropic"; // placeholder, won't be used for analysis
+        p.log.success("No API key needed! Your editor's AI will populate context via MCP tools.");
+      } else {
+        selectedProvider = provider as string;
+        const info = PROVIDER_INFO[selectedProvider];
+        p.log.info(`Set your API key:\n  ${chalk.cyan(`export ${info.envVar}=your-key-here`)}`);
+      }
     }
   }
 
@@ -203,7 +217,10 @@ export async function wizardCommand(options: {
   let selectedEmbedding: string | undefined;
   const embeddingKeys = detectEmbeddingProviders();
 
-  if (options.embeddingProvider) {
+  // In cursor-only mode, skip embeddings prompt
+  if (cursorOnlyMode) {
+    selectedEmbedding = embeddingKeys.length > 0 ? embeddingKeys[0].provider : "__none__";
+  } else if (options.embeddingProvider) {
     const normalized = options.embeddingProvider.toLowerCase();
     if (!["openai", "gemini", "none"].includes(normalized)) {
       console.log(chalk.red(`Invalid embedding provider "${options.embeddingProvider}". Use openai, gemini, or none.`));
@@ -244,7 +261,10 @@ export async function wizardCommand(options: {
 
   // Step 4: Tools
   let selectedTools: ToolName[] = requestedTools;
-  if (interactive && !options.tools && !useDefaults) {
+  if (cursorOnlyMode && !selectedTools.includes("cursor")) {
+    selectedTools = ["cursor", ...selectedTools];
+  }
+  if (interactive && !options.tools && !useDefaults && !cursorOnlyMode) {
     const tools = await p.multiselect({
       message: "Which AI tools do you use?",
       options: [
@@ -268,8 +288,8 @@ export async function wizardCommand(options: {
   }
 
   // Step 5: Analyze decision
-  let runAnalysis = !Boolean(options.skipAnalyze);
-  if (interactive && !options.skipAnalyze && !useDefaults) {
+  let runAnalysis = !Boolean(options.skipAnalyze) && !cursorOnlyMode;
+  if (interactive && !options.skipAnalyze && !useDefaults && !cursorOnlyMode) {
     const confirmAnalyze = await p.confirm({
       message: `Analyze your repo with ${PROVIDER_INFO[selectedProvider!].label}? (2-5 min, uses AI)`,
       initialValue: true,
@@ -338,24 +358,39 @@ export async function wizardCommand(options: {
   }
 
   console.log();
-  p.note(
-    [
-      `${chalk.cyan("git add .context/ && git commit -m 'Add repomemory'")}`,
+  const nextSteps = [
+    `${chalk.cyan("git add .context/ && git commit -m 'Add repomemory'")}`,
+    "",
+    "Your team now shares the knowledge.",
+    "",
+  ];
+
+  if (cursorOnlyMode) {
+    nextSteps.push(
+      chalk.bold("To populate context, open Cursor and type:"),
+      `  ${chalk.cyan("/repomemory-analyze")}`,
       "",
-      "Your team now shares the knowledge.",
-      "",
+      "Cursor's own AI will scan your repo and populate .context/ via MCP tools.",
+      "No API key needed — your Cursor subscription handles it.",
+    );
+  } else {
+    nextSteps.push(
       selectedTools.includes("claude")
         ? "Claude Code will auto-discover context via the MCP server."
         : `Run ${chalk.cyan("repomemory setup claude")} to add MCP server integration.`,
-      "",
-      `Run ${chalk.cyan("repomemory status")} to see your context coverage.`,
-      `Run ${chalk.cyan("repomemory analyze --merge")} to update without overwriting edits.`,
-      `Run ${chalk.cyan("repomemory dashboard")} to browse context in your browser.`,
-      "",
-      chalk.dim(`Tip: Next time, use ${chalk.cyan("npx repomemory go --yes")} for deterministic one-command setup.`),
-    ].join("\n"),
-    "Next steps"
+    );
+  }
+
+  nextSteps.push(
+    "",
+    `Run ${chalk.cyan("repomemory status")} to see your context coverage.`,
+    `Run ${chalk.cyan("repomemory analyze --merge")} to update without overwriting edits.`,
+    `Run ${chalk.cyan("repomemory dashboard")} to browse context in your browser.`,
+    "",
+    chalk.dim(`Tip: Next time, use ${chalk.cyan("npx repomemory go --yes")} for deterministic one-command setup.`),
   );
+
+  p.note(nextSteps.join("\n"), "Next steps");
 
   p.outro(chalk.green("Your codebase will never forget again."));
 }

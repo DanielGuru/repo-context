@@ -262,13 +262,43 @@ Do NOT skip this step even if the task seems simple.**
 
   writeFileSync(join(cursorRulesDir, "repomemory.mdc"), ruleContent);
 
+  // --- Part 3: Create .cursor/commands/ for Cursor-driven analysis ---
+  const cursorCommandsDir = join(repoRoot, ".cursor", "commands");
+  mkdirSync(cursorCommandsDir, { recursive: true });
+
+  const analyzeCommandContent = `---
+description: Analyze this repo and populate repomemory context
+---
+Scan this repository thoroughly — read the key files, understand the architecture, tech stack, patterns, and important decisions.
+
+Then use the repomemory MCP tools to populate the knowledge base:
+
+1. Call \`context_write(category="facts", filename="architecture")\` — Describe the tech stack, monorepo/single-repo structure, key directories, frameworks, languages, and service boundaries.
+
+2. Call \`context_write(category="facts", filename="database")\` — Document the data layer: ORM, database type, schema patterns, migrations approach. Skip if no database.
+
+3. Call \`context_write(category="facts", filename="deployment")\` — Document how the app is deployed: hosting, CI/CD, env management, infrastructure. Skip if not apparent.
+
+4. Call \`context_write(category="facts", filename="patterns")\` — Document key code patterns: error handling, auth, API design, state management, testing approach.
+
+5. Call \`context_write(category="decisions")\` for any clear architectural decisions visible in the code (e.g., "chose X over Y", config files that reveal deliberate choices).
+
+6. Update the project index: Call \`context_write(category="index")\` with a concise project summary — what this project is, the main entry points, and how to get oriented quickly.
+
+Be thorough and specific — reference actual file paths and code patterns you find. This context will be used by AI agents in every future session, so accuracy matters.
+`;
+
+  writeFileSync(join(cursorCommandsDir, "repomemory-analyze.md"), analyzeCommandContent);
+
   // --- Output ---
   if (mcpAlreadyConfigured) {
     console.log(chalk.green("\n\u2713 Cursor configured!\n"));
     console.log(`  ${chalk.green("\u2713")} MCP server already in ${mcpConfigPath}`);
     console.log(`  ${chalk.green("\u2713")} Updated .cursor/rules/repomemory.mdc`);
+    console.log(`  ${chalk.green("\u2713")} Updated .cursor/commands/repomemory-analyze.md`);
     console.log();
     console.log(chalk.dim("Restart Cursor to pick up any changes."));
+    console.log(chalk.dim("Type /repomemory-analyze in Cursor chat to populate context with Cursor's AI."));
     return;
   }
 
@@ -292,11 +322,13 @@ Do NOT skip this step even if the task seems simple.**
   }
 
   console.log(`  ${chalk.green("\u2713")} Created .cursor/rules/repomemory.mdc`);
+  console.log(`  ${chalk.green("\u2713")} Created .cursor/commands/repomemory-analyze.md`);
   console.log();
   console.log(chalk.dim("Restart Cursor to activate. The MCP server will auto-start in every project."));
-  console.log(
-    chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient")
-  );
+  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient"));
+  console.log();
+  console.log(chalk.bold("To populate context using Cursor's AI:"));
+  console.log(chalk.cyan("  Type /repomemory-analyze in Cursor chat"));
 }
 
 function setupCopilot(repoRoot: string) {
