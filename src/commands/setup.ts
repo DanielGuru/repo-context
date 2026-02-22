@@ -226,29 +226,28 @@ globs: **/*
 # Repository Memory (repomemory)
 
 This project uses repomemory for persistent AI memory via MCP tools.
+You have access to both Cursor's native codebase understanding AND repomemory's knowledge base.
+**Use both together** — Cursor sees the code, repomemory remembers the context across sessions.
 
-**IMPORTANT: Before starting ANY task, you MUST call \`context_search\` with relevant
-keywords. This is NOT optional. The knowledge base contains architecture docs,
-past decisions, and known regressions that WILL save you from mistakes.
-Do NOT skip this step even if the task seems simple.**
+## Before ANY Task (Required)
 
-**ALWAYS at the start of every task:**
-1. Call \`context_search\` with keywords related to your task
-2. If this is a new session, call \`context_auto_orient\` for a full project overview
-3. NEVER propose changes without first checking for past decisions
+1. Call \`context_search\` with keywords related to your task — this checks past decisions, known regressions, and architecture docs that will save you from mistakes
+2. If this is a new session or you feel disoriented, call \`context_auto_orient\` for a full project overview
+3. Use Cursor's native codebase search to find relevant files, then cross-reference with repomemory's stored knowledge
+4. NEVER propose changes without checking \`context_search\` for past decisions on that component
 
-**During your session:**
-- ALWAYS use \`context_write\` to record discoveries, decisions, and gotchas
-- ALWAYS use \`context_delete\` to remove stale or incorrect knowledge
-- Record coding preferences in \`context_write(category="preferences", ...)\`
+## During Your Session
 
-**Before modifying code:**
-- You MUST search for known regressions related to the component
-- You MUST check for past decisions before proposing alternatives
+- When you discover something about the codebase (via reading files, debugging, etc.), **record it** with \`context_write\` — future sessions will thank you
+- Use \`context_delete\` to remove stale or incorrect knowledge you find
+- Record coding preferences in \`context_write(category="preferences", ...)\` — these persist globally across all projects
 
-**At end of session (REQUIRED):**
-- Write a session summary: \`context_write(category="sessions", ...)\`
-- Route discoveries to the right category (facts/, decisions/, preferences/)
+## Combining Cursor + repomemory
+
+- **Cursor's strength:** Real-time code understanding, symbol search, file navigation, inline completions
+- **repomemory's strength:** Cross-session memory, architectural decisions, regression history, team knowledge
+- When searching: use \`context_search\` for high-level knowledge (decisions, patterns, regressions), use Cursor's native search for specific code
+- When analyzing: use Cursor to read and understand code, then use \`context_write\` to persist what you learned
 
 ## MCP Tools Available
 
@@ -284,45 +283,67 @@ Do NOT skip this step even if the task seems simple.**
   writeFileSync(join(cursorCommandsDir, "repomemory-analyze.md"), `---
 description: Analyze this repo and populate repomemory context
 ---
-Scan this repository thoroughly — read the key files, understand the architecture, tech stack, patterns, and important decisions.
+Use your full codebase understanding to analyze this repository and populate the repomemory knowledge base. You have access to both Cursor's native code indexing and the repomemory MCP tools — use both.
 
-Then use the repomemory MCP tools to populate the knowledge base:
+## Step 1: Discover (use Cursor's native capabilities)
 
-1. Call \`context_write(category="facts", filename="architecture")\` — Describe the tech stack, monorepo/single-repo structure, key directories, frameworks, languages, and service boundaries.
+Browse the project structure, read key files (package.json, config files, entry points, schema files, README, etc.), understand the architecture, tech stack, patterns, and important decisions. Use Cursor's codebase search and symbol navigation to explore thoroughly.
 
-2. Call \`context_write(category="facts", filename="database")\` — Document the data layer: ORM, database type, schema patterns, migrations approach. Skip if no database.
+## Step 2: Record (use repomemory MCP tools)
 
-3. Call \`context_write(category="facts", filename="deployment")\` — Document how the app is deployed: hosting, CI/CD, env management, infrastructure. Skip if not apparent.
+Write what you discovered to the knowledge base:
 
-4. Call \`context_write(category="facts", filename="patterns")\` — Document key code patterns: error handling, auth, API design, state management, testing approach.
+1. Call \`context_write(category="facts", filename="architecture")\` — Tech stack, directory structure, frameworks, languages, service boundaries. Reference actual file paths.
 
-5. Call \`context_write(category="decisions")\` for any clear architectural decisions visible in the code (e.g., "chose X over Y", config files that reveal deliberate choices).
+2. Call \`context_write(category="facts", filename="database")\` — Data layer: ORM, database type, schema patterns, migrations. Skip if no database.
 
-6. Update the project index: Call \`context_write(category="index")\` with a concise project summary — what this project is, the main entry points, and how to get oriented quickly.
+3. Call \`context_write(category="facts", filename="deployment")\` — How the app deploys: hosting, CI/CD, env config, infrastructure. Skip if not apparent.
 
-Be thorough and specific — reference actual file paths and code patterns you find. This context will be used by AI agents in every future session, so accuracy matters.
+4. Call \`context_write(category="facts", filename="patterns")\` — Key code patterns: error handling, auth, API design, state management, testing approach.
+
+5. Call \`context_write(category="facts", filename="api")\` — API routes/endpoints, request/response patterns, middleware. Skip if not an API.
+
+6. Call \`context_write(category="decisions")\` for any clear architectural decisions visible in the code (e.g., framework choices, library selections, patterns that suggest deliberate choices).
+
+7. Update the project index: Call \`context_write(category="index")\` with a concise project summary — what this project is, the main entry points, and how to get oriented quickly.
+
+## Quality Standards
+
+- **Reference actual file paths** — don't be vague, point to real files
+- **Be specific about versions** — note framework/library versions from package.json or lock files
+- **Include code patterns** — show actual function signatures or patterns used, not just descriptions
+- **Note what's missing** — if there are no tests, no CI, no types, say so — that's valuable context too
+
+This context will be used by AI agents in every future session, so accuracy matters more than brevity.
 `);
 
   // Command: Quick orientation
   writeFileSync(join(cursorCommandsDir, "repomemory-orient.md"), `---
 description: Orient yourself in this project using repomemory context
 ---
-Call \`context_auto_orient()\` to load the project context — this returns the project index, your coding preferences, recent session summaries, and recent changes.
+Get oriented in this project by combining repomemory's stored knowledge with Cursor's live codebase understanding.
 
-Read and internalize the context before proceeding. If the context seems sparse or empty, suggest running /repomemory-analyze first to populate it.
+1. Call \`context_auto_orient()\` to load stored context — project index, coding preferences, recent sessions, and recent changes.
+2. Cross-reference with the actual codebase — verify the stored context is still accurate by checking key files Cursor can see.
+3. If context seems sparse or empty, suggest running \`/repomemory-analyze\` first.
 
-Summarize what you learned about this project in a few sentences.
+Summarize what you know about this project, noting any discrepancies between stored context and current code state.
 `);
 
   // Command: Search context
   writeFileSync(join(cursorCommandsDir, "repomemory-search.md"), `---
 description: Search repomemory context for relevant knowledge
 ---
-Ask the user what they want to search for, or infer from the current conversation context.
+Search for knowledge using both repomemory's stored context and Cursor's live codebase understanding.
 
-Call \`context_search(query="<search terms>")\` with relevant keywords.
+1. Call \`context_search(query="<search terms>")\` with relevant keywords to find stored knowledge (past decisions, known regressions, architecture docs, preferences).
+2. Use Cursor's native codebase search to find relevant code, files, and symbols that relate to the query.
+3. Combine both results — stored knowledge gives you the "why" and history, Cursor's code search gives you the current "what".
 
-Present the results clearly — highlight which category each result is from (facts, decisions, regressions, preferences) and how it's relevant to the current task.
+Present results clearly:
+- **From repomemory:** Category, key findings, relevance to the query
+- **From codebase:** Relevant files, functions, patterns found
+- **Gaps:** Note if something exists in code but isn't documented in repomemory (offer to record it)
 `);
 
   // Command: Record knowledge
