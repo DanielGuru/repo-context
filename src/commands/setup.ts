@@ -4,6 +4,17 @@ import chalk from "chalk";
 
 const SUPPORTED_TOOLS = ["claude", "cursor", "copilot", "windsurf", "cline", "aider", "continue"];
 
+function printCursorCommands() {
+  console.log();
+  console.log(chalk.bold("Cursor commands available (type / in chat):"));
+  console.log(chalk.cyan("  /repomemory-analyze") + chalk.dim("  — Full repo analysis, populate context"));
+  console.log(chalk.cyan("  /repomemory-orient") + chalk.dim("   — Quick project orientation"));
+  console.log(chalk.cyan("  /repomemory-search") + chalk.dim("   — Search knowledge base"));
+  console.log(chalk.cyan("  /repomemory-record") + chalk.dim("   — Record a fact, decision, or regression"));
+  console.log(chalk.cyan("  /repomemory-session") + chalk.dim("  — Save session summary"));
+  console.log(chalk.cyan("  /repomemory-status") + chalk.dim("   — Show context coverage"));
+}
+
 export async function setupCommand(tool: string, options: { dir?: string }) {
   const repoRoot = options.dir || process.cwd();
 
@@ -262,11 +273,12 @@ Do NOT skip this step even if the task seems simple.**
 
   writeFileSync(join(cursorRulesDir, "repomemory.mdc"), ruleContent);
 
-  // --- Part 3: Create .cursor/commands/ for Cursor-driven analysis ---
+  // --- Part 3: Create .cursor/commands/ for Cursor-driven workflows ---
   const cursorCommandsDir = join(repoRoot, ".cursor", "commands");
   mkdirSync(cursorCommandsDir, { recursive: true });
 
-  const analyzeCommandContent = `---
+  // Command: Full repo analysis
+  writeFileSync(join(cursorCommandsDir, "repomemory-analyze.md"), `---
 description: Analyze this repo and populate repomemory context
 ---
 Scan this repository thoroughly — read the key files, understand the architecture, tech stack, patterns, and important decisions.
@@ -286,19 +298,85 @@ Then use the repomemory MCP tools to populate the knowledge base:
 6. Update the project index: Call \`context_write(category="index")\` with a concise project summary — what this project is, the main entry points, and how to get oriented quickly.
 
 Be thorough and specific — reference actual file paths and code patterns you find. This context will be used by AI agents in every future session, so accuracy matters.
-`;
+`);
 
-  writeFileSync(join(cursorCommandsDir, "repomemory-analyze.md"), analyzeCommandContent);
+  // Command: Quick orientation
+  writeFileSync(join(cursorCommandsDir, "repomemory-orient.md"), `---
+description: Orient yourself in this project using repomemory context
+---
+Call \`context_auto_orient()\` to load the project context — this returns the project index, your coding preferences, recent session summaries, and recent changes.
+
+Read and internalize the context before proceeding. If the context seems sparse or empty, suggest running /repomemory-analyze first to populate it.
+
+Summarize what you learned about this project in a few sentences.
+`);
+
+  // Command: Search context
+  writeFileSync(join(cursorCommandsDir, "repomemory-search.md"), `---
+description: Search repomemory context for relevant knowledge
+---
+Ask the user what they want to search for, or infer from the current conversation context.
+
+Call \`context_search(query="<search terms>")\` with relevant keywords.
+
+Present the results clearly — highlight which category each result is from (facts, decisions, regressions, preferences) and how it's relevant to the current task.
+`);
+
+  // Command: Record knowledge
+  writeFileSync(join(cursorCommandsDir, "repomemory-record.md"), `---
+description: Record a fact, decision, or regression to repomemory
+---
+Ask the user what they want to record, or infer from the current conversation. Determine the right category:
+
+- **facts/** — How things work (architecture, APIs, patterns, integrations)
+- **decisions/** — Why something was chosen ("We use X instead of Y because...")
+- **regressions/** — Bugs, gotchas, things that broke ("Never do X because Y happens")
+- **preferences/** — Coding style, conventions ("Always use early returns", "Prefer X over Y")
+
+Call \`context_write(category="<category>", filename="<descriptive-name>", content="<content>")\` with well-structured markdown content.
+
+Confirm what was recorded and where.
+`);
+
+  // Command: Session summary
+  writeFileSync(join(cursorCommandsDir, "repomemory-session.md"), `---
+description: Save a summary of this session to repomemory
+---
+Review the current conversation and summarize what was accomplished, what was learned, and any important decisions or discoveries.
+
+Call \`context_write(category="sessions", filename="<date-slug>", content="<summary>")\` with a structured summary including:
+
+- **What was done** — Tasks completed, files changed
+- **Decisions made** — Any choices about architecture, approach, tools
+- **Issues found** — Bugs, gotchas, unexpected behavior
+- **Next steps** — What should happen next
+
+This helps future AI sessions pick up where you left off.
+`);
+
+  // Command: Show status
+  writeFileSync(join(cursorCommandsDir, "repomemory-status.md"), `---
+description: Show repomemory context coverage and freshness
+---
+Call \`context_list()\` to see all entries in the knowledge base.
+
+Present the results as a status report:
+- How many entries per category (facts, decisions, regressions, preferences, sessions)
+- Which categories are empty or sparse
+- When entries were last updated (if dates are visible in content)
+
+Suggest what's missing — e.g., "No regressions recorded yet" or "Architecture facts could use more detail."
+`);
 
   // --- Output ---
   if (mcpAlreadyConfigured) {
     console.log(chalk.green("\n\u2713 Cursor configured!\n"));
     console.log(`  ${chalk.green("\u2713")} MCP server already in ${mcpConfigPath}`);
     console.log(`  ${chalk.green("\u2713")} Updated .cursor/rules/repomemory.mdc`);
-    console.log(`  ${chalk.green("\u2713")} Updated .cursor/commands/repomemory-analyze.md`);
+    console.log(`  ${chalk.green("\u2713")} Updated .cursor/commands/ (6 commands)`);
     console.log();
     console.log(chalk.dim("Restart Cursor to pick up any changes."));
-    console.log(chalk.dim("Type /repomemory-analyze in Cursor chat to populate context with Cursor's AI."));
+    printCursorCommands();
     return;
   }
 
@@ -322,13 +400,10 @@ Be thorough and specific — reference actual file paths and code patterns you f
   }
 
   console.log(`  ${chalk.green("\u2713")} Created .cursor/rules/repomemory.mdc`);
-  console.log(`  ${chalk.green("\u2713")} Created .cursor/commands/repomemory-analyze.md`);
+  console.log(`  ${chalk.green("\u2713")} Created .cursor/commands/ (6 commands)`);
   console.log();
   console.log(chalk.dim("Restart Cursor to activate. The MCP server will auto-start in every project."));
-  console.log(chalk.dim("Tools: context_search, context_write, context_read, context_list, context_delete, context_auto_orient"));
-  console.log();
-  console.log(chalk.bold("To populate context using Cursor's AI:"));
-  console.log(chalk.cyan("  Type /repomemory-analyze in Cursor chat"));
+  printCursorCommands();
 }
 
 function setupCopilot(repoRoot: string) {
