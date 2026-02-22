@@ -52,13 +52,50 @@ Your `CLAUDE.md` / `.cursorrules` helps, but it's static and gets stale.
 
 ## Quick Start
 
-### Interactive
+### With an API key (Claude Code, terminal workflows)
 
 ```bash
 npx repomemory go
 ```
 
 One command: sets up global profile, creates `.context/`, configures Claude Code + Cursor, runs AI analysis, prints CLAUDE.md instructions.
+
+### With Cursor (no API key needed)
+
+```bash
+npx repomemory setup cursor
+```
+
+This installs everything Cursor needs:
+- **MCP server** in `~/.cursor/mcp.json` (auto-starts repomemory in every project)
+- **Rules** in `.cursor/rules/repomemory.mdc` (teaches Cursor's AI to use context)
+- **6 commands** in `.cursor/commands/` (run with `/` in Cursor chat)
+
+Then in Cursor chat, type:
+```
+/repomemory-analyze
+```
+
+Cursor's own AI scans your repo and populates `.context/` via the MCP tools. No external API key required — your Cursor subscription handles it.
+
+**Available Cursor commands:**
+
+| Command | What it does |
+|---------|-------------|
+| `/repomemory-analyze` | Full repo analysis — populates facts, decisions, index |
+| `/repomemory-orient` | Quick orientation at start of session |
+| `/repomemory-search` | Search the knowledge base |
+| `/repomemory-record` | Record a fact, decision, or regression |
+| `/repomemory-session` | Save a session summary |
+| `/repomemory-status` | Show context coverage |
+
+### Guided wizard
+
+```bash
+npx repomemory wizard
+```
+
+Walks through provider selection, tool integration, and first analysis. If no API keys are detected, offers a **"None — I use Cursor"** option that skips external analysis entirely.
 
 ### Non-interactive (CI-safe)
 
@@ -67,14 +104,6 @@ npx repomemory go --yes --provider anthropic --embedding-provider gemini --max-f
 ```
 
 No prompts when `--yes` / `--defaults` / `--no-prompt` is used.
-
-### Guided Wizard
-
-```bash
-npx repomemory wizard
-```
-
-Walks through provider selection, tool integration, and first analysis.
 
 ## MCP Server — Agents With Real Memory
 
@@ -107,15 +136,17 @@ Sessions are auto-captured on shutdown. Zero config — `repomemory setup claude
 
 ## Supported Tools
 
-| Tool | Integration | Depth |
-|------|------------|-------|
-| **Claude Code** | MCP server (auto-starts) + post-commit hook | **Native** |
-| **Cursor** | MCP server + `.cursor/rules/` | **Native** |
-| **GitHub Copilot** | `copilot-instructions.md` | Rule-based |
-| **Windsurf** | `.windsurfrules` | Rule-based |
-| **Cline** | `.clinerules` | Rule-based |
-| **Aider** | `.aider.conf.yml` | Rule-based |
-| **Continue** | `.continue/rules/` | Rule-based |
+| Tool | Integration | API Key Required? |
+|------|------------|-------------------|
+| **Claude Code** | MCP server (auto-starts) + post-commit hook | Yes (for analysis) |
+| **Cursor** | MCP server + rules + 6 slash commands | **No** — uses Cursor's built-in AI |
+| **GitHub Copilot** | `copilot-instructions.md` | Yes (for analysis) |
+| **Windsurf** | `.windsurfrules` | Yes (for analysis) |
+| **Cline** | `.clinerules` | Yes (for analysis) |
+| **Aider** | `.aider.conf.yml` | Yes (for analysis) |
+| **Continue** | `.continue/rules/` | Yes (for analysis) |
+
+> **Cursor users:** You don't need any API key. Run `npx repomemory setup cursor`, then use `/repomemory-analyze` in Cursor chat. Cursor's AI does the analysis using the MCP tools — whatever model Cursor is using (it can even switch models mid-task).
 
 ## Supported Providers
 

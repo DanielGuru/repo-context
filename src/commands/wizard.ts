@@ -261,8 +261,13 @@ export async function wizardCommand(options: {
 
   // Step 4: Tools
   let selectedTools: ToolName[] = requestedTools;
-  if (cursorOnlyMode && !selectedTools.includes("cursor")) {
-    selectedTools = ["cursor", ...selectedTools];
+  if (cursorOnlyMode) {
+    // In cursor-only mode, replace the default ["claude"] with ["cursor"]
+    if (!options.tools) {
+      selectedTools = ["cursor"];
+    } else if (!selectedTools.includes("cursor")) {
+      selectedTools = ["cursor", ...selectedTools];
+    }
   }
   if (interactive && !options.tools && !useDefaults && !cursorOnlyMode) {
     const tools = await p.multiselect({

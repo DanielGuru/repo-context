@@ -186,7 +186,10 @@ function setupCursor(repoRoot: string) {
 
   let mcpAlreadyConfigured = false;
 
-  if (homeDir && existsSync(cursorConfigDir)) {
+  if (homeDir) {
+    // Create ~/.cursor/ if it doesn't exist (Cursor will use it on next launch)
+    mkdirSync(cursorConfigDir, { recursive: true });
+
     let mcpConfig: Record<string, unknown> = {};
 
     if (existsSync(mcpConfigPath)) {
@@ -382,19 +385,10 @@ Suggest what's missing — e.g., "No regressions recorded yet" or "Architecture 
 
   console.log(chalk.green("\n\u2713 Cursor configured!\n"));
 
-  if (homeDir && existsSync(cursorConfigDir)) {
+  if (homeDir) {
     console.log(chalk.bold(`MCP server added to ${mcpConfigPath}:`));
     console.log(
       chalk.dim(JSON.stringify({ repomemory: { command: "npx", args: ["-y", "repomemory", "serve"] } }, null, 2))
-    );
-    console.log();
-  } else {
-    console.log(chalk.yellow("  \u26a0 ~/.cursor/ not found. Install Cursor, then add the MCP server manually:"));
-    console.log(chalk.dim(`  Add to ~/.cursor/mcp.json:`));
-    console.log(
-      chalk.dim(
-        JSON.stringify({ mcpServers: { repomemory: { command: "npx", args: ["-y", "repomemory", "serve"] } } }, null, 2)
-      )
     );
     console.log();
   }
