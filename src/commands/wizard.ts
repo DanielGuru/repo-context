@@ -376,13 +376,13 @@ export async function wizardCommand(options: {
       `  ${chalk.cyan("/repomemory-analyze")}`,
       "",
       "Cursor's own AI will scan your repo and populate .context/ via MCP tools.",
-      "No API key needed — your Cursor subscription handles it.",
+      "No API key needed — your Cursor subscription handles it."
     );
   } else {
     nextSteps.push(
       selectedTools.includes("claude")
         ? "Claude Code will auto-discover context via the MCP server."
-        : `Run ${chalk.cyan("repomemory setup claude")} to add MCP server integration.`,
+        : `Run ${chalk.cyan("repomemory setup claude")} to add MCP server integration.`
     );
   }
 
@@ -392,7 +392,7 @@ export async function wizardCommand(options: {
     `Run ${chalk.cyan("repomemory analyze --merge")} to update without overwriting edits.`,
     `Run ${chalk.cyan("repomemory dashboard")} to browse context in your browser.`,
     "",
-    chalk.dim(`Tip: Next time, use ${chalk.cyan("npx repomemory go --yes")} for deterministic one-command setup.`),
+    chalk.dim(`Tip: Next time, use ${chalk.cyan("npx repomemory go --yes")} for deterministic one-command setup.`)
   );
 
   p.note(nextSteps.join("\n"), "Next steps");

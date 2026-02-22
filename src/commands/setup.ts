@@ -280,7 +280,9 @@ You have access to both Cursor's native codebase understanding AND repomemory's 
   mkdirSync(cursorCommandsDir, { recursive: true });
 
   // Command: Full repo analysis
-  writeFileSync(join(cursorCommandsDir, "repomemory-analyze.md"), `---
+  writeFileSync(
+    join(cursorCommandsDir, "repomemory-analyze.md"),
+    `---
 description: Analyze this repo and populate repomemory context
 ---
 Use your full codebase understanding to analyze this repository and populate the repomemory knowledge base. You have access to both Cursor's native code indexing and the repomemory MCP tools — use both.
@@ -305,7 +307,7 @@ Write what you discovered to the knowledge base:
 
 6. Call \`context_write(category="decisions")\` for any clear architectural decisions visible in the code (e.g., framework choices, library selections, patterns that suggest deliberate choices).
 
-7. Update the project index: Call \`context_write(category="index")\` with a concise project summary — what this project is, the main entry points, and how to get oriented quickly.
+7. Update the project index: Write a concise project summary to \`.context/index.md\` — what this project is, the main entry points, and how to get oriented quickly. Use \`context_write(category="facts", filename="index-overview")\` if you want to persist it as a searchable entry.
 
 ## Quality Standards
 
@@ -315,10 +317,13 @@ Write what you discovered to the knowledge base:
 - **Note what's missing** — if there are no tests, no CI, no types, say so — that's valuable context too
 
 This context will be used by AI agents in every future session, so accuracy matters more than brevity.
-`);
+`
+  );
 
   // Command: Quick orientation
-  writeFileSync(join(cursorCommandsDir, "repomemory-orient.md"), `---
+  writeFileSync(
+    join(cursorCommandsDir, "repomemory-orient.md"),
+    `---
 description: Orient yourself in this project using repomemory context
 ---
 Get oriented in this project by combining repomemory's stored knowledge with Cursor's live codebase understanding.
@@ -328,10 +333,13 @@ Get oriented in this project by combining repomemory's stored knowledge with Cur
 3. If context seems sparse or empty, suggest running \`/repomemory-analyze\` first.
 
 Summarize what you know about this project, noting any discrepancies between stored context and current code state.
-`);
+`
+  );
 
   // Command: Search context
-  writeFileSync(join(cursorCommandsDir, "repomemory-search.md"), `---
+  writeFileSync(
+    join(cursorCommandsDir, "repomemory-search.md"),
+    `---
 description: Search repomemory context for relevant knowledge
 ---
 Search for knowledge using both repomemory's stored context and Cursor's live codebase understanding.
@@ -344,10 +352,13 @@ Present results clearly:
 - **From repomemory:** Category, key findings, relevance to the query
 - **From codebase:** Relevant files, functions, patterns found
 - **Gaps:** Note if something exists in code but isn't documented in repomemory (offer to record it)
-`);
+`
+  );
 
   // Command: Record knowledge
-  writeFileSync(join(cursorCommandsDir, "repomemory-record.md"), `---
+  writeFileSync(
+    join(cursorCommandsDir, "repomemory-record.md"),
+    `---
 description: Record a fact, decision, or regression to repomemory
 ---
 Ask the user what they want to record, or infer from the current conversation. Determine the right category:
@@ -360,10 +371,13 @@ Ask the user what they want to record, or infer from the current conversation. D
 Call \`context_write(category="<category>", filename="<descriptive-name>", content="<content>")\` with well-structured markdown content.
 
 Confirm what was recorded and where.
-`);
+`
+  );
 
   // Command: Session summary
-  writeFileSync(join(cursorCommandsDir, "repomemory-session.md"), `---
+  writeFileSync(
+    join(cursorCommandsDir, "repomemory-session.md"),
+    `---
 description: Save a summary of this session to repomemory
 ---
 Review the current conversation and summarize what was accomplished, what was learned, and any important decisions or discoveries.
@@ -376,10 +390,13 @@ Call \`context_write(category="sessions", filename="<date-slug>", content="<summ
 - **Next steps** — What should happen next
 
 This helps future AI sessions pick up where you left off.
-`);
+`
+  );
 
   // Command: Show status
-  writeFileSync(join(cursorCommandsDir, "repomemory-status.md"), `---
+  writeFileSync(
+    join(cursorCommandsDir, "repomemory-status.md"),
+    `---
 description: Show repomemory context coverage and freshness
 ---
 Call \`context_list()\` to see all entries in the knowledge base.
@@ -390,7 +407,8 @@ Present the results as a status report:
 - When entries were last updated (if dates are visible in content)
 
 Suggest what's missing — e.g., "No regressions recorded yet" or "Architecture facts could use more detail."
-`);
+`
+  );
 
   // --- Output ---
   if (mcpAlreadyConfigured) {

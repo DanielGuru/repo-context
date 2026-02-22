@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.10.0 (2026-02-22)
+
+### New Features
+- **Deep Cursor integration** — `repomemory setup cursor` now installs MCP server, `.cursor/rules/repomemory.mdc`, and 6 slash commands (`/repomemory-analyze`, `/repomemory-orient`, `/repomemory-search`, `/repomemory-record`, `/repomemory-session`, `/repomemory-status`)
+- **No API key required for Cursor** — Cursor users can populate `.context/` entirely through Cursor's built-in AI via the MCP tools, no external API key needed
+- **Wizard cursor-only mode** — When no API keys are detected, the wizard offers a "None — I use Cursor" option that skips external analysis and sets up Cursor-driven workflows
+- **Auto-detect Cursor in `go`** — `repomemory go` now auto-detects `~/.cursor/` and configures Cursor alongside Claude Code
+
+### Fixes
+- **Invalid category in Cursor analyze command** — Fixed `context_write(category="index")` reference (not a valid category) in the generated `/repomemory-analyze` command
+
 ## 1.9.0 (2026-02-20)
 
 ### Security

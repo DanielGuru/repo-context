@@ -270,7 +270,9 @@ export async function goCommand(options: {
       }
     } else {
       console.log(chalk.yellow(`${currentStep}/${totalSteps} No API key found. Skipping analysis.`));
-      console.log(chalk.dim("  If you use Cursor, type /repomemory-analyze in chat to populate context with Cursor's AI."));
+      console.log(
+        chalk.dim("  If you use Cursor, type /repomemory-analyze in chat to populate context with Cursor's AI.")
+      );
       console.log(chalk.dim("  Or set your API key and run: npx repomemory analyze"));
     }
   } else if (options.skipAnalyze) {
